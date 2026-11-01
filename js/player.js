@@ -31,17 +31,20 @@
     const s = ui.clone(session);
     const entries = [];
     if (s.warmup && s.warmup.length) entries.push({ key: 'warm', kind: 'list', name: 'Échauffement', list: s.warmup, checked: [], done: false });
+    const SS = G.ssLabels(s);
     s.blocks.forEach((b, bi) => b.items.forEach((it, ii) => {
       const key = `${bi}-${ii}`;
       if (it.type === 'cardio') { entries.push(Object.assign({}, it, { key, kind: 'cardio', block: b.title, done: false, result: {} })); return; }
       const ex = A.exById(it.exId);
       if (!ex) return;
-      const circuit = b.kind === 'circuit';
+      const circuit = b.kind === 'circuit', ss = SS[key];
       const n = circuit ? b.rounds : it.sets;
+      // Superset : A1, ~30 s pour changer de poste, A2, puis le repos de la paire
       entries.push({
-        key, kind: 'ex', block: b.title, blockKind: b.kind, exId: it.exId, name: ex.n, item: it,
+        key, kind: 'ex', block: b.title, blockKind: b.kind, exId: it.exId, name: ex.n, item: it, ssLab: ss ? ss.lab : null,
         reps: it.reps, hold: it.hold || null, rir: it.rir, load: it.load, note: [it.gearNote, it.note].filter(Boolean).join(' '), uni: !!ex.uni, bw: !!ex.bw,
-        rest: circuit ? b.restEx : (it.rest || 0), group: circuit ? 'c' + bi : null, restRound: circuit ? b.restRound : 0,
+        rest: circuit ? b.restEx : ss && ss.next ? (it.ssRest ?? 30) : (it.rest || 0),
+        group: circuit ? 'c' + bi : ss ? `s${bi}-${ss.first}` : null, restRound: circuit ? b.restRound : ss ? (it.rest || 0) : 0,
         sets: Array.from({ length: n }, (_, i) => ({ w: null, r: null, done: false, tr: it.setReps ? it.setReps[i] : null })),
       });
     }));
@@ -68,7 +71,8 @@
         const rounds = Math.max(...E.slice(i, j).map(x => x.sets.length));
         for (let r = 0; r < rounds; r++) {
           for (let k = i; k < j; k++) {
-            if (r < E[k].sets.length) out.push({ e: k, s: r, rest: k === j - 1 ? (r < rounds - 1 ? E[k].restRound : 0) : E[k].rest });
+            // Après le dernier tour d'un circuit, on enchaîne ; après un superset, repos comme après un exercice seul
+            if (r < E[k].sets.length) out.push({ e: k, s: r, rest: k === j - 1 ? (r < rounds - 1 || !isTour(E[k]) ? E[k].restRound : 0) : E[k].rest });
           }
         }
         i = j - 1;
@@ -215,10 +219,12 @@
   }
 
   const exCount = act => act.entries.filter(x => x.kind !== 'list');
+  // Circuit : on compte des tours ; exercice seul ou superset : des séries
+  const isTour = e => !!e.group && e.group[0] === 'c';
   function header(act, e) {
     const list = exCount(act);
     const i = list.indexOf(e);
-    return `<div class="pl-block">${ui.esc(e.block || '')}${i >= 0 ? ` · ${i + 1} / ${list.length}` : ''}</div>`;
+    return `<div class="pl-block">${ui.esc(e.block || '')}${i >= 0 ? ` · ${i + 1} / ${list.length}` : ''}${e.ssLab ? ` · <b class="accent">Superset ${e.ssLab}</b>` : ''}</div>`;
   }
 
   function body(act, e) {
@@ -239,12 +245,12 @@
     const phW = i => { const p = prevW(i); if (p) return p; const sg = A.prog.suggest(e.item, i); return sg && sg.w ? sg.w : ''; };
     const phR = i => { const sx = e.sets[i]; if (sx.tr) return sx.tr; if (e.hold) return e.hold; const l = last && last.sets[i]; return l ? l.r : G.repsTop(e.reps); };
     return `${header(act, e)}<h2 class="pl-ex">${ui.esc(e.name)}</h2>
-      <div class="pl-target"><span class="tag accent">${e.group ? 'Tour' : 'Série'} ${s + 1} / ${n}</span><span class="tag">${target}</span>
+      <div class="pl-target"><span class="tag accent">${isTour(e) ? 'Tour' : 'Série'} ${s + 1} / ${n}</span><span class="tag">${target}</span>
         ${e.rir ? `<span class="tag">RIR ${ui.esc(e.rir)}</span>` : ''}${e.rest ? `<span class="tag">${ui.icon('timer', 'sm')} ${A.cmp.restLabel(e.rest)}</span>` : ''}</div>
       ${e.load ? `<p class="small muted mt-s">${ui.esc(e.load)}</p>` : ''}
       ${sug && (sug.w || sug.r || sug.why) ? `<div class="pl-sugg">${ui.icon('bolt')}<span>${sug.w ? `<b>${ui.num(sug.w, 1)} kg</b> · ` : ''}${ui.esc(sug.why)}</span></div>` : ''}
       ${t ? timerHTML(t, e) : `
-      <table class="sets-t"><thead><tr><th>${e.group ? 'Tour' : 'Série'}</th><th>Précédent</th><th>${e.bw ? 'Lest kg' : 'kg'}</th><th>${e.hold ? 'Sec.' : 'Reps'}</th><th></th></tr></thead><tbody>
+      <table class="sets-t"><thead><tr><th>${isTour(e) ? 'Tour' : 'Série'}</th><th>Précédent</th><th>${e.bw ? 'Lest kg' : 'kg'}</th><th>${e.hold ? 'Sec.' : 'Reps'}</th><th></th></tr></thead><tbody>
         ${e.sets.map((x, i) => { const l = last && last.sets[i]; return `<tr class="${i === s ? 'cur' : ''} ${x.done ? 'done' : ''}">
           <td class="sn">${i + 1}</td><td class="prev">${l ? (l.w ? ui.num(l.w, 1) + '×' : '') + l.r : '—'}</td>
           <td><input data-w="${i}" type="number" step="0.5" min="0" inputmode="decimal" value="${x.w ?? ''}" placeholder="${phW(i)}" aria-label="Charge série ${i + 1}"></td>
@@ -294,7 +300,7 @@
     let w = set.w;
     if (w == null) { for (let k = s - 1; k >= 0; k--) if (e.sets[k].done && e.sets[k].w) { w = e.sets[k].w; break; } }
     if (w == null) { const sg = A.prog.suggest(e.item, s); w = sg && sg.w; }
-    return `${e.name} · ${e.group ? 'tour' : 'série'} ${s + 1}/${e.sets.length}${w ? ' · ' + ui.num(w, 1) + ' kg' : ''}`;
+    return `${e.ssLab ? e.ssLab + ' · ' : ''}${e.name} · ${isTour(e) ? 'tour' : 'série'} ${s + 1}/${e.sets.length}${w ? ' · ' + ui.num(w, 1) + ' kg' : ''}`;
   }
 
   function bottom(act, e) {
@@ -314,7 +320,7 @@
       return `<div class="row gap"><button class="btn xl" style="width:auto" data-cmanual>Fait sans chrono</button><button class="btn primary xl" data-tstart>${ui.icon('play')} Démarrer</button></div>`;
     }
     if (e.hold) return `<div class="row gap"><button class="btn xl" style="width:auto" data-ok="${act.cur.s}">${ui.icon('check')}</button><button class="btn primary xl" data-tstart>${ui.icon('timer')} Chrono ${e.hold} s${e.uni ? ' × 2' : ''}</button></div>`;
-    return `<button class="btn primary xl" data-ok="${act.cur.s}">${ui.icon('check')} Valider ${e.group ? 'le tour' : 'la série'} ${act.cur.s + 1}</button>`;
+    return `<button class="btn primary xl" data-ok="${act.cur.s}">${ui.icon('check')} Valider ${isTour(e) ? 'le tour' : 'la série'} ${act.cur.s + 1}</button>`;
   }
 
   // ——— Interactions ———
@@ -405,7 +411,7 @@
       html: `<div class="pick-list" style="margin-top:0">${act.entries.map((x, i) => {
         const prog = x.kind === 'ex' ? `${x.sets.filter(s => s.done).length}/${x.sets.length}` : x.done ? '✓' : '';
         const full = x.kind === 'ex' ? x.sets.every(s => s.done) : x.done;
-        return `<button class="pick" data-go="${i}" ${i === act.cur.e ? 'style="background:var(--card)"' : ''}><div class="grow"><div class="pk-n">${ui.esc(x.name)}</div><div class="pk-m">${ui.esc(x.block || '')}</div></div>
+        return `<button class="pick" data-go="${i}" ${i === act.cur.e ? 'style="background:var(--card)"' : ''}><div class="grow"><div class="pk-n">${x.ssLab ? `<span class="accent">${x.ssLab}</span> · ` : ''}${ui.esc(x.name)}</div><div class="pk-m">${ui.esc(x.block || '')}</div></div>
           <span class="tag ${full ? 'accent' : ''}">${prog}</span></button>`;
       }).join('')}</div>
       <div class="row gap wrap mt"><button class="btn" data-addex>${ui.icon('plus')} Ajouter un exercice</button><span class="grow"></span><button class="btn primary" data-finish>${ui.icon('check')} Terminer la séance</button></div>`,

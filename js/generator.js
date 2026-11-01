@@ -7,10 +7,10 @@
     force: { n: 'Force', d: '3-5 reps lourdes · repos 3 min', split: { force: 1 } },
     hypertrophie: { n: 'Hypertrophie', d: '6-15 reps proches de l\'échec · repos 1,5-2,5 min', split: { hyper: 1 } },
     endurance: { n: 'Endurance', d: 'Cardio et endurance musculaire', split: null },
-    force_hyper: { n: 'Force + Hypertrophie', d: 'Lourd d\'abord, puis volume', split: { force: .45, hyper: .55 } },
+    force_hyper: { n: 'Force + Hypertrophie', d: 'Lourd d\'abord, puis volume', split: { force: .4, hyper: .6 } },
     force_endu: { n: 'Force + Endurance', d: 'Profil tactique / hybride', split: { force: .6, cardio: .4 } },
     hyper_endu: { n: 'Hypertrophie + Endurance', d: 'Muscle puis cardio', split: { hyper: .65, cardio: .35 } },
-    tout: { n: 'Un peu de tout', d: 'Force, muscle et cardio', split: { force: .35, hyper: .4, cardio: .25 } },
+    tout: { n: 'Un peu de tout', d: 'Force, muscle et cardio', split: { force: .3, hyper: .5, cardio: .2 } },
   };
   const LEVELS = { debutant: 1, inter: 2, avance: 3 };
   const LEVEL_NAMES = { debutant: 'Débutant', inter: 'Intermédiaire', avance: 'Avancé' };
@@ -50,14 +50,67 @@
     const ex = A.exById(it.exId) || {};
     const work = (it.hold ? it.hold : repsAvg(it.reps) * 3.5 + 8) * (ex.uni ? 2 : 1);
     if (inCircuit) return work;
-    return it.sets * work + Math.max(0, it.sets - 1) * (it.rest || 0) + 75 + (it.ramp || 0);
+    return it.sets * work + Math.max(0, it.sets - 1) * (it.rest || 0) + 60 + (it.ramp || 0);
   }
+
+  // ---------- Supersets (A1 / A2) ----------
+  // Exercices consécutifs avec le même it.ss : une série de chaque, puis le repos (it.rest) après la paire
+  const SS_REST = 30; // le temps de changer de poste entre A1 et A2
+  function runs(items) {
+    const out = [];
+    items.forEach(it => {
+      const last = out[out.length - 1];
+      if (it.ss != null && last && last[0].ss === it.ss) last.push(it); else out.push([it]);
+    });
+    return out;
+  }
+  function runSeconds(run) {
+    if (run.length === 1) return itemSeconds(run[0]);
+    const sets = Math.max(...run.map(it => it.sets || 1));
+    return run.reduce((s, it, i) => s + (it.sets || 1) * (itemSeconds(it, true) + (i < run.length - 1 ? (it.ssRest ?? SS_REST) : 0)) + (it.ramp || 0), 0)
+      + (sets - 1) * (run[run.length - 1].rest || 0) + 90;
+  }
+  // Repos après la paire : chaque muscle garde au moins le repos prévu entre deux de ses propres séries
+  function pairRest(run) {
+    run.forEach(it => { if (it.ssRest == null) it.ssRest = SS_REST; });
+    const w = run.map(it => itemSeconds(it, true));
+    const round = w.reduce((a, b) => a + b, 0) + run.slice(0, -1).reduce((a, it) => a + it.ssRest, 0);
+    const need = Math.max(...run.map((it, i) => (it.rest0 ?? it.rest ?? 90) - (round - w[i])));
+    const r = ui.clamp(Math.ceil(need / 15) * 15, 45, 150);
+    run.forEach(it => { if (it.rest0 == null) it.rest0 = it.rest; it.rest = r; });
+  }
+  // Paire cassée (exercice retiré ou déplacé) : l'exercice restant reprend son repos normal
+  function fixPairs(s) {
+    s.blocks.forEach(b => runs(b.items).forEach(r => {
+      if (r.length > 1 || r[0].ss == null) return;
+      const it = r[0];
+      if (it.rest0 != null) it.rest = it.rest0;
+      ['ss', 'ssRest', 'rest0'].forEach(k => delete it[k]);
+    }));
+  }
+  // Libellés A1, A2, B1… dans l'ordre de la séance, par clé « bloc-exercice »
+  function ssLabels(s) {
+    const out = {};
+    let n = 0;
+    s.blocks.forEach((b, bi) => {
+      let ii = 0;
+      runs(b.items).forEach(r => {
+        if (r.length > 1) {
+          const L = String.fromCharCode(65 + (n++ % 26));
+          r.forEach((it, k) => { out[`${bi}-${ii + k}`] = { lab: L + (k + 1), next: k < r.length - 1 ? L + (k + 2) : null, first: L + '1' }; });
+        }
+        ii += r.length;
+      });
+    });
+    return out;
+  }
+
   function blockSeconds(b) {
     if (b.kind === 'circuit') {
       const per = b.items.reduce((s, it) => s + itemSeconds(it, true) + (b.restEx || 0), 0);
       return b.rounds * per + Math.max(0, b.rounds - 1) * (b.restRound || 0) + 60;
     }
-    return b.items.reduce((s, it) => s + itemSeconds(it), 0);
+    return runs(b.items).reduce((s, r) => s + runSeconds(r), 0);
   }
   function sessionSeconds(s) {
     return (s.warmup && s.warmup.length ? (s.warmupSec || 360) : 0)
@@ -132,13 +185,19 @@
     hist.slice(0, 2).forEach(h => (h.exercises || []).forEach(e => recent.add(e.exId)));
     const weekAgo = Date.now() - 7 * 864e5;
     const ctx = {
-      lvl: LEVELS[p.level] || 2, eq: new Set(p.equipment || []), muscles: new Set(p.muscles || []), weak: p.weak || null,
-      duration: p.duration, rand: rng(p.seed), used: new Set(), cov: {}, recent, cardio: p.cardio || 'auto', gear: p.gear || null,
+      lvl: LEVELS[p.level] || 2, eq: new Set(p.equipment || []), muscles: new Set(p.muscles || []), weak: p.weak || null, goal: p.goal,
+      duration: p.duration, rand: rng(p.seed), used: new Set(), cov: {}, recent, cardio: p.cardio || 'auto', gear: p.gear || null, setup: p.setup,
       hardRecent: hist.filter(h => h.date > weekAgo && (h.cardio || []).some(c => c.hard)).length,
     };
     Object.keys(MUS).forEach(m => { ctx.cov[m] = 0; });
+    ctx.fams = new Set();
+    // Séries difficiles par séance : au-delà, la fatigue l'emporte sur le gain (repères Schoenfeld, Israetel, Pelland 2024)
+    ctx.sets = 0;
+    ctx.maxSets = Math.round(8 + (p.duration || 60) * 0.3);
     ctx.use = (ex, sets) => {
       ctx.used.add(ex.id);
+      ctx.fams.add(fam(ex));
+      ctx.sets += sets;
       ex.m.forEach(m => { ctx.cov[m] += sets; });
       ex.s.forEach(m => { ctx.cov[m] += sets * 0.5; });
     };
@@ -164,54 +223,167 @@
     // Haltères ou élastiques trop lourds pour l'exercice : on préfère autre chose
     const gf = gearFit(ex, ctx.gear);
     if (gf) s += gf.k === 'heavy' ? -5 : gf.k === 'light' ? -1 : 0;
+    // Deuxième exercice d'un muscle : un autre angle plutôt qu'une variante du premier (Fonseca 2014, Kassiano 2022)
+    if (ctx.fams.has(fam(ex))) s -= 4;
     return s;
   }
   const needScore = (ex, ctx) => ex.m.reduce((s, m) => s + (ctx.muscles.has(m) && ctx.cov[m] < 3 ? 1.5 : 0), 0);
+  // Grands groupes d'abord, jambes et pectoraux / dos en tête comme dans une séance classique
+  const BIG_ORDER = ['quadriceps', 'pectoraux', 'dorsaux', 'ischios', 'fessiers', 'epaules', 'haut_dos'];
+  const bigRank = m => { const i = BIG_ORDER.indexOf(m); return i < 0 ? 99 : i; };
   function orderMuscles(ctx) {
     const order = Object.keys(MUS).filter(m => ctx.muscles.has(m));
-    return order.sort((a, b) => ((b === ctx.weak) - (a === ctx.weak)) || ((!!MUS[b].big) - (!!MUS[a].big)));
+    return order.sort((a, b) => ((b === ctx.weak) - (a === ctx.weak)) || ((!!MUS[b].big) - (!!MUS[a].big)) || (bigRank(a) - bigRank(b)));
+  }
+  // Alterne muscles opposés et haut / bas du corps : les exercices choisis se rangent ensuite en supersets
+  // (deux gros mouvements du bas du corps ne s'associent pas : un muscle des jambes appelle un muscle du haut)
+  function interleave(list) {
+    const out = [], rest = list.slice();
+    while (rest.length) {
+      const m = rest.shift();
+      out.push(m);
+      const other = x => MUS[x].g !== MUS[m].g;
+      let j = MUS[m].g === 'bas' ? -1 : rest.findIndex(x => (ANTAG[m] || []).includes(x));
+      if (j < 0) j = rest.findIndex(other);
+      if (j >= 0) out.push(rest.splice(j, 1)[0]);
+    }
+    return out;
+  }
+  // Famille d'exercices : même schéma moteur sur les mêmes muscles (rowings entre eux, squat bulgare chargé / au poids du corps…)
+  const fam = ex => `${ex.p || ex.t}|${ex.m.slice().sort().join('+')}`;
+
+  // ---------- Ordre des exercices et supersets ----------
+  // Muscles opposés : les paires agoniste / antagoniste gardent la performance de chaque série (Robbins et al. 2010)
+  const ANTAG = {
+    pectoraux: ['dorsaux', 'haut_dos'], dorsaux: ['pectoraux', 'epaules'], haut_dos: ['pectoraux', 'epaules'], epaules: ['dorsaux', 'haut_dos'],
+    arriere_epaules: ['pectoraux'], biceps: ['triceps'], triceps: ['biceps'], avant_bras: ['triceps'],
+    quadriceps: ['ischios'], ischios: ['quadriceps'], abdos: ['lombaires'], lombaires: ['abdos'],
+  };
+  const region = ex => (ex.m.some(m => MUS[m].g === 'bas') ? 'bas' : ex.m.every(m => MUS[m].g === 'core') ? 'core' : 'haut');
+  const loadsBack = ex => ex.m.includes('lombaires') || ex.s.includes('lombaires');
+  function canPair(a, b) {
+    // Aucun muscle en commun, sinon la deuxième série perd en qualité
+    if (a.m.some(m => b.m.includes(m) || b.s.includes(m)) || b.m.some(m => a.s.includes(m))) return false;
+    if (a.t === 'pliom' || b.t === 'pliom') return false;
+    // Jamais deux gros mouvements du bas du corps, ni deux exercices qui chargent le bas du dos
+    if (a.t === 'comp' && b.t === 'comp' && region(a) === 'bas' && region(b) === 'bas') return false;
+    return !(loadsBack(a) && loadsBack(b));
+  }
+  function pairScore(a, b) {
+    let s = 0;
+    if (a.m.some(m => (ANTAG[m] || []).some(x => b.m.includes(x)))) s += 4;
+    if (region(a) !== region(b)) s += 2;
+    if (a.t === b.t || (a.t !== 'comp' && b.t !== 'comp')) s += 1;
+    if (a.uni && b.uni) s -= 1;
+    return s;
+  }
+  // Exercice principal, point faible, polyarticulaires, isolation, puis gainage / mollets
+  function rank(it) {
+    const ex = A.exById(it.exId);
+    if (it.role === 'main') return -1;
+    if (it.weak) return 0;
+    if (ex.t === 'comp') return 1;
+    if (ex.t === 'core' || ex.t === 'carry' || ex.m.includes('mollets')) return 3;
+    return 2;
+  }
+  const unpair = it => { if (it.rest0 != null) it.rest = it.rest0; ['ss', 'ssRest', 'rest0'].forEach(k => delete it[k]); };
+  // Range les exercices et forme les supersets. Le point faible reste en séries classiques avec son repos complet ;
+  // deux mouvements principaux ne s'associent qu'en poussée / tirage du haut du corps (Robbins et al. 2010).
+  // limit : nombre maximal de paires ; quand le temps le permet, les premières (polyarticulaires) repassent en séries classiques.
+  function arrange(items, limit = Infinity) {
+    items.forEach(unpair);
+    items.sort((a, b) => rank(a) - rank(b));
+    const left = items.splice(0, items.length);
+    const pairs = [];
+    while (left.length) {
+      const it = left.shift();
+      items.push(it);
+      if (it.weak) continue;
+      const ex = A.exById(it.exId), main = it.role === 'main';
+      let best = -1, bs = -Infinity;
+      left.forEach((o, i) => {
+        const eo = A.exById(o.exId);
+        if (o.weak || (o.role === 'main') !== main || !canPair(ex, eo)) return;
+        if (main && (region(ex) !== 'haut' || region(eo) !== 'haut' || pairScore(ex, eo) < 4)) return;
+        const sc = pairScore(ex, eo) - i * 0.3;
+        if (sc > bs) { bs = sc; best = i; }
+      });
+      if (best < 0) continue;
+      const o = left.splice(best, 1)[0];
+      items.push(o);
+      it.ss = o.ss = pairs.length + 1;
+      pairRest([it, o]);
+      pairs.push([it, o]);
+    }
+    pairs.slice(0, Math.max(0, pairs.length - limit)).forEach(p => p.forEach(unpair));
+    return items;
+  }
+  // Le moins de supersets possible pour tenir dans le temps : repos complet dès qu'on peut se le permettre
+  function settle(kind, items, max) {
+    let lim = 0;
+    while (lim < 20 && blockSeconds({ kind, items: arrange(items.slice(), lim) }) > max) lim++;
+    return arrange(items, lim);
   }
 
   // ---------- Blocs ----------
+  // Durée du bloc une fois les exercices rangés en supersets
+  const costOf = (kind, list) => blockSeconds({ kind, items: arrange(list.slice()) });
+  // Reps adaptées à mes haltères / élastiques dès le choix de l'exercice, pour que la durée prévue soit juste
+  const gearIt = (it, kind, ctx) => { applyGear({ blocks: [{ kind, items: [it] }] }, ctx.setup, ctx.eq, ctx.gear); return it; };
+
   function buildForce(budget, ctx) {
     const items = [];
     let t = 0;
     const L = ctx.lvl;
-    const sets = L === 1 ? 3 : L === 2 ? 4 : 5;
-    const maxMain = ctx.duration >= 90 ? 3 : ctx.duration >= 60 ? 2 : 1;
+    const short = ctx.duration <= 45;
+    // Séance mixte : un mouvement lourd puis des polyarticulaires en supersets ; force pure ou tactique : jusqu'à 3 mouvements lourds
+    const mixed = ctx.goal === 'tout' || ctx.goal === 'force_hyper';
+    const sets = Math.max(3, (L === 1 ? 3 : L === 2 ? 4 : 5) - (short || mixed ? 1 : 0));
+    const maxMain = mixed ? (ctx.duration >= 120 ? 2 : 1) : ctx.duration >= 60 ? 3 : ctx.duration >= 45 ? 2 : 1;
     const patterns = new Set();
     for (let k = 0; k < maxMain; k++) {
       const cands = pool(ctx, ex => ex.heavy && ex.pr >= 6 && !patterns.has(ex.p) && ex.m.some(m => ctx.muscles.has(m)));
-      const ex = pick(cands, ex => baseScore(ex, ctx) + needScore(ex, ctx) + (ctx.weak && ex.m.includes(ctx.weak) ? 6 : 0) - (ex.bw ? 1 : 0), ctx);
+      // Bonus au mouvement opposé d'un développé ou d'un tirage déjà choisi : les deux s'alterneront
+      const opp = ex => items.some(i => { const e = A.exById(i.exId); return region(e) === 'haut' && region(ex) === 'haut' && canPair(e, ex) && pairScore(e, ex) >= 4; });
+      const ex = pick(cands, ex => baseScore(ex, ctx) + needScore(ex, ctx) + (ctx.weak && ex.m.includes(ctx.weak) ? 6 : 0) - (ex.bw ? 1 : 0) + (opp(ex) ? 3 : 0), ctx);
       if (!ex) break;
+      // Premier mouvement : volume complet ; les suivants une série de moins (Prilepin : 10-20 reps lourdes par mouvement)
       const it = {
-        exId: ex.id, sets, rest: L === 3 ? 240 : 180, rir: L === 1 ? '2-3' : '1-2', role: 'main', ramp: k === 0 ? 240 : 150,
+        exId: ex.id, sets: k === 0 ? sets : Math.max(3, sets - 1), rest: L === 3 ? 240 : 180, rir: L === 1 ? '2-3' : '1-2', role: 'main', ramp: k === 0 ? (short ? 180 : 240) : 120,
         reps: ex.bw ? '3-6' : (L === 1 ? '5' : '3-5'),
         load: ex.bw ? 'Leste-toi pour rester entre 3 et 6 reps' : '≈ 80-87 % de ton 1RM',
         pctRange: ex.bw ? null : [0.8, 0.87],
       };
-      if (k > 0 && t + itemSeconds(it) > budget) break;
-      items.push(it); t += itemSeconds(it); ctx.use(ex, sets); patterns.add(ex.p);
+      gearIt(it, 'force', ctx);
+      const t2 = costOf('force', [...items, it]);
+      if (k > 0 && t2 > budget + 60) break;
+      items.push(it); t = t2; ctx.use(ex, it.sets); patterns.add(ex.p);
     }
+    // Polyarticulaires secondaires, en supersets de muscles opposés (développé + rowing, squat + tractions…)
     let guard = 0;
-    while (budget - t > 300 && guard++ < 6) {
-      const cands = pool(ctx, ex => ex.t === 'comp' && ex.m.some(m => ctx.muscles.has(m)));
+    while (budget + 120 - t > 120 && ctx.sets + 3 <= ctx.maxSets && guard++ < 10) {
+      const cands = pool(ctx, ex => ex.t === 'comp' && ex.m.some(m => ctx.muscles.has(m)) && !(ex.heavy && ex.p === 'hinge' && ex.m.includes('lombaires')));
       const ex = pick(cands, ex => baseScore(ex, ctx) + needScore(ex, ctx) * 2 + (ctx.weak && ex.m.includes(ctx.weak) ? 4 : 0), ctx);
       if (!ex) break;
-      const it = { exId: ex.id, sets: 3, reps: ex.bw ? '5-8' : '6-8', rest: 150, rir: '2', role: 'acc', load: ex.bw ? 'Leste-toi si besoin' : 'Lourd mais propre' };
-      if (t + itemSeconds(it) > budget + 120) break;
-      items.push(it); t += itemSeconds(it); ctx.use(ex, 3);
+      const it = gearIt({ exId: ex.id, sets: 3, reps: ex.bw ? (ex.heavy ? '5-8' : '6-12') : '6-8', rest: 150, rir: '2', role: 'acc',
+        load: ex.bw ? (ex.heavy ? 'Leste-toi si besoin' : 'Variante assez dure pour rester sous 12 reps : descente en 3 s, pause en bas, sac lesté') : 'Lourd mais propre' }, 'force', ctx);
+      const t2 = costOf('force', [...items, it]);
+      if (t2 > budget + 120) break;
+      items.push(it); t = t2; ctx.use(ex, 3);
     }
     if (!items.length) {
       // Aucun mouvement lourd dispo (ex. bras seuls) : force relative sur les meilleurs exercices
       for (const m of orderMuscles(ctx)) {
-        if (budget - t < 300) break;
+        if (budget - t < 200) break;
         const ex = pick(pool(ctx, e => e.m.includes(m) && e.t !== 'pliom' && !e.hold), e => baseScore(e, ctx), ctx);
         if (!ex) continue;
-        const it = { exId: ex.id, sets: 4, reps: '5-8', rest: 150, rir: '1-2', role: 'acc' };
-        items.push(it); t += itemSeconds(it); ctx.use(ex, 4);
+        const it = gearIt({ exId: ex.id, sets: 4, reps: '5-8', rest: 150, rir: '1-2', role: 'acc' }, 'force', ctx);
+        const t2 = costOf('force', [...items, it]);
+        if (t2 > budget + 120) continue;
+        items.push(it); t = t2; ctx.use(ex, 4);
       }
     }
+    settle('force', items, Math.max(t, budget + 120));
     return { kind: 'force', title: 'Bloc force', items, note: 'Séries lourdes et repos longs : la qualité de chaque répétition prime.' };
   }
 
@@ -220,7 +392,7 @@
     const small = ['mollets', 'abdos', 'obliques', 'avant_bras', 'trapezes'].includes(m);
     let it;
     if (ex.hold) it = { exId: ex.id, sets: 3, hold: ex.t === 'carry' ? 40 : 20 + L * 10, rest: 60, rir: '1-2' };
-    else if (ex.t === 'comp' && !small) it = { exId: ex.id, sets: 3, reps: ex.bw ? '8-15' : '6-10', rest: 150, rir: L === 1 ? '2-3' : '1-2' };
+    else if (ex.t === 'comp' && !small) it = { exId: ex.id, sets: 3, reps: ex.bw ? '8-15' : '6-10', rest: 120, rir: L === 1 ? '2-3' : '1-2' };
     else if (small) it = { exId: ex.id, sets: 3, reps: '12-20', rest: 60, rir: L === 1 ? '1-2' : '0-1' };
     else it = { exId: ex.id, sets: 3, reps: '10-15', rest: 90, rir: L === 1 ? '1-2' : '0-1' };
     if (m === ctx.weak) { it.sets += 1; it.weak = true; }
@@ -233,50 +405,52 @@
     let t = 0;
     // Point faible d'abord, puis les muscles les moins travaillés par les blocs précédents
     const start = Object.assign({}, ctx.cov);
-    const order = orderMuscles(ctx).sort((a, b) => ((b === ctx.weak) - (a === ctx.weak)) || (start[a] - start[b]));
+    const order = interleave(orderMuscles(ctx).sort((a, b) => ((b === ctx.weak) - (a === ctx.weak)) || (start[a] - start[b])));
     const cap = m => (m === ctx.weak ? 12 : MUS[m].big ? 9 : 6);
+    // 1er passage : un exercice pour chaque muscle pas encore travaillé ; ensuite, du volume en plus sous un autre angle
     const passes = [order, order.filter(m => m === ctx.weak || MUS[m].big), order, order];
+    const max = budget + 90;
     outer:
-    for (const pass of passes) {
+    for (const [pi, pass] of passes.entries()) {
       for (const m of pass) {
-        if (budget - t < 240) break outer;
-        if (ctx.cov[m] >= cap(m)) continue;
+        if (max - t < 120 || ctx.sets + 2 > ctx.maxSets) break outer;
+        if (ctx.cov[m] >= cap(m) || (pi === 0 && ctx.cov[m] >= 3)) continue;
         const wantComp = ctx.cov[m] < 1 && MUS[m].big;
         const cands = pool(ctx, ex => ex.m.includes(m) && ex.t !== 'pliom' && !(ex.heavy && ex.p === 'hinge' && ex.m.includes('lombaires')));
         const ex = pick(cands, ex => baseScore(ex, ctx) + (ex.str ? 3 : 0)
           + (wantComp ? (ex.t === 'comp' ? 4 : 0) : (ex.t === 'iso' ? 2 : 0)) + (ex.m[0] === m ? 1.5 : 0), ctx);
         if (!ex) continue;
-        const it = hyperItem(ex, m, ctx);
-        let sec = itemSeconds(it);
-        if (t + sec > budget + 90 && it.sets > 2) { it.sets = 2; sec = itemSeconds(it); }
-        if (t + sec > budget + 90) continue;
-        items.push(it); t += sec; ctx.use(ex, it.sets);
+        const it = gearIt(hyperItem(ex, m, ctx), 'hyper', ctx);
+        if (ctx.sets + it.sets > ctx.maxSets) it.sets = 2;
+        let t2 = costOf('hyper', [...items, it]);
+        if (t2 > max && it.sets > 2) { it.sets = 2; t2 = costOf('hyper', [...items, it]); }
+        if (t2 > max) continue;
+        items.push(it); t = t2; ctx.use(ex, it.sets);
       }
     }
-    // Point faible d'abord, puis polyarticulaires, isolation, et enfin gainage / mollets
-    const rank = it => {
-      const ex = A.exById(it.exId);
-      if (it.weak) return 0;
-      if (ex.t === 'comp') return 1;
-      if (ex.t === 'core' || ex.t === 'carry' || ex.m.includes('mollets')) return 3;
-      return 2;
-    };
-    items.sort((a, b) => rank(a) - rank(b));
+    settle('hyper', items, max);
     return { kind: 'hyper', title: title || 'Bloc hypertrophie', items };
   }
 
   function buildCircuit(budget, ctx) {
     const items = [];
-    orderMuscles(ctx).slice(0, 6).forEach(m => {
-      const cands = pool(ctx, ex => ex.m.includes(m) && (!ex.heavy || ex.bw));
+    // Une station par muscle (8 au plus), sans deux variantes du même mouvement
+    for (const m of orderMuscles(ctx)) {
+      if (items.length >= 8) break;
+      if (ctx.cov[m] >= 3) continue;
+      const cands = pool(ctx, ex => ex.m.includes(m) && (!ex.heavy || ex.bw) && !ctx.fams.has(fam(ex)));
       const ex = pick(cands, ex => baseScore(ex, ctx) + (ex.bw ? 2 : 0) + (ex.t === 'comp' ? 2 : 0) + (ex.t === 'pliom' ? 1 : 0) - (ex.eq.includes('machine') ? 2 : 0), ctx);
-      if (!ex) return;
-      items.push(ex.hold ? { exId: ex.id, hold: 30 } : { exId: ex.id, reps: ex.t === 'pliom' ? '12-15' : '15-20' });
+      if (!ex) continue;
+      // Tractions, dips… : 15-20 reps n'est pas réaliste, on reste sous le maximum
+      items.push(ex.hold ? { exId: ex.id, hold: 30 } : { exId: ex.id, reps: ex.t === 'pliom' ? '12-15' : ex.heavy ? '6-12' : '15-20' });
       ctx.use(ex, 3);
-    });
+    }
     const restEx = ctx.lvl === 1 ? 30 : 20, restRound = 90;
-    const b = { kind: 'circuit', title: 'Circuit endurance musculaire', items, restEx, restRound, rounds: 1, note: 'Enchaîne les exercices avec peu de repos, récupère entre les tours.' };
+    const b = { kind: 'circuit', title: 'Circuit endurance musculaire', items, restEx, restRound, rounds: 2, note: 'Enchaîne les exercices avec peu de repos, récupère entre les tours.' };
     if (!items.length) return b;
+    // Au moins 2 tours : avec peu de temps, moins de stations
+    while (items.length > 4 && blockSeconds(b) > budget + 120) items.pop();
+    b.rounds = 1;
     const one = blockSeconds(b) - 60;
     b.rounds = ui.clamp(Math.floor((budget - 60 + restRound) / (one + restRound)), 2, 6);
     items.forEach(it => { it.sets = b.rounds; it.rest = restEx; });
@@ -348,7 +522,7 @@
       const r = ctx.rand();
       if (r < 0.5) {
         items.push(C.n4x4(mod));
-        if (min - 26 >= 10) items.push(C.z2(mod, min - 26));
+        if (min - 26 >= 8) items.push(C.z2(mod, min - 26));
       } else if (r < 0.75) {
         const s = C.seuil(mod, Math.min(min, 40));
         items.push(s);
@@ -360,6 +534,7 @@
   }
 
   // ---------- Échauffement, notes, titre ----------
+  // first : premier exercice lourd (objet exercice), pour les séries de montée en charge
   function warmupFor(muscles, kinds, first) {
     const has = g => [...muscles].some(m => MUS[m] && MUS[m].g === g);
     const lifting = kinds.has('force') || kinds.has('hyper') || kinds.has('circuit');
@@ -368,7 +543,9 @@
     if (has('haut') || has('bras')) list.push({ n: 'Mobilité épaules', d: 'Cercles de bras ×10, band pull-apart ou W au mur ×15, pompes scapulaires ×10' });
     if (lifting) list.push({ n: 'Activation du tronc', d: 'Dead bug ×6/côté, bird dog ×6/côté' });
     if (kinds.has('cardio') && !lifting) list.push({ n: 'Gammes', d: 'Montées de genoux, talons-fesses, pas chassés (2 × 20 m), puis 2-3 accélérations progressives' });
-    if (first) list.push({ n: 'Montée en charge', d: `${first} : séries progressives (≈ 50 % × 8, 70 % × 4, 85 % × 2) avant les séries de travail` });
+    if (first) list.push({ n: 'Montée en charge', d: first.bw
+      ? `${first.n} : 2 séries faciles de 3-5 reps, loin de l'échec, avant les séries de travail`
+      : `${first.n} : séries progressives (≈ 50 % × 8, 70 % × 4, 85 % × 2) avant les séries de travail` });
     return list;
   }
   const COOLDOWN = [
@@ -379,7 +556,8 @@
   function notesFor(ctx, kinds) {
     const n = [];
     if (kinds.has('force')) n.push("Force : charges lourdes (≈ 80-87 % du max), 3-5 reps, 1-3 reps en réserve et ~3 min de repos (Prilepin ; Schoenfeld et al. 2016).");
-    if (kinds.has('hyper')) n.push("Hypertrophie : 6-15 reps proches de l'échec, variantes en position étirée privilégiées, 2 min et plus de repos sur les polyarticulaires (Schoenfeld et al. 2017 ; Maeo et al. 2021-2023).");
+    if (kinds.has('hyper')) n.push("Hypertrophie : 6-15 reps proches de l'échec, variantes en position étirée privilégiées, ~2 min de repos sur les polyarticulaires (Schoenfeld et al. 2017 ; Maeo et al. 2021-2023 ; Singer et al. 2024).");
+    if (kinds.has('hyper') || kinds.has('force')) n.push("Plusieurs exercices par grand muscle, sous des angles différents (presse + écarté, tirage vertical + rowing…) : la variation des exercices développe mieux toutes les portions du muscle (Fonseca et al. 2014 ; Kassiano et al. 2022).");
     if (kinds.has('circuit')) n.push('Endurance musculaire : 15-20 reps, repos courts, plusieurs tours.');
     if (kinds.has('cardio')) n.push(ctx.hardRecent >= 2 ? 'Cardio facile pour respecter la distribution 80/20 (Seiler).' : 'Cardio : protocole choisi selon le temps disponible (Billat, Helgerud, Tabata).');
     if ((kinds.has('force') || kinds.has('hyper')) && kinds.has('cardio')) n.push('Musculation avant le cardio pour préserver la qualité des séries (Schumann et al. 2022).');
@@ -410,8 +588,8 @@
     const kinds = Object.keys(split);
     const pureCardio = kinds.length === 1 && kinds[0] === 'cardio';
     const total = p.duration * 60;
-    const warmupSec = pureCardio ? 480 : p.duration <= 30 ? 300 : p.duration <= 60 ? 420 : 540;
-    const coolSec = pureCardio ? 300 : p.duration <= 30 ? 120 : 180;
+    const warmupSec = pureCardio ? 480 : p.duration <= 30 ? 300 : p.duration <= 45 ? 360 : p.duration <= 60 ? 420 : 540;
+    const coolSec = pureCardio ? 300 : p.duration <= 45 ? 120 : 180;
     let remaining = total - warmupSec - coolSec;
     let shareLeft = kinds.reduce((s, k) => s + split[k], 0);
     const blocks = [];
@@ -435,7 +613,8 @@
       }
       if (remaining > 600) notes.push("Séance plus courte que le temps disponible : au-delà de ~10 séries difficiles par muscle et par séance, les séries supplémentaires rapportent peu.");
     }
-    const first = blocks[0] && blocks[0].kind === 'force' && blocks[0].items[0] ? A.exById(blocks[0].items[0].exId).n : null;
+    if (blocks.some(b => b.items.some(it => it.ss != null))) notes.push("Supersets A1/A2 : deux exercices de muscles opposés ou non concurrents, enchaînés. Chaque muscle garde son repos complet, la performance est la même qu'en séries classiques et la séance contient beaucoup plus d'exercices dans le même temps (Robbins et al. 2010 ; Weakley et al. 2017 ; Iversen et al. 2021). Exercice principal et point faible restent en séries classiques.");
+    const first = blocks[0] && blocks[0].kind === 'force' && blocks[0].items[0] ? A.exById(blocks[0].items[0].exId) : null;
     // Muscles non travaillés : faute de matériel, ou faute de temps
     const uncovered = p.muscles.filter(m => ctx.cov[m] === 0);
     const noGear = uncovered.filter(m => !A.exList().some(ex => ex.m.includes(m) && ex.t !== 'mob' && ex.eq.every(e => ctx.eq.has(e)) && (ex.lvl || 1) <= ctx.lvl));
@@ -528,13 +707,15 @@
     const fb = blocks.find(b => b.kind === 'force' && b.items[0] && b.items[0].exId);
     const s = Object.assign({
       id: ui.uid(), title, createdAt: Date.now(), source: 'template', muscles, blocks,
-      warmup: warmupFor(new Set(muscles), kinds, fb ? A.exById(fb.items[0].exId).n : null),
+      warmup: warmupFor(new Set(muscles), kinds, fb ? A.exById(fb.items[0].exId) : null),
       warmupSec: kinds.size === 1 && kinds.has('cardio') ? 480 : 420, cooldown: COOLDOWN, cooldownSec: 180, notes: [],
     }, extra);
+    blocks.forEach(b => { if (b.kind !== 'circuit') runs(b.items).forEach(r => { if (r.length > 1) pairRest(r); }); });
     s.estMin = Math.round(sessionSeconds(s) / 60);
     return s;
   }
   function refresh(s) {
+    fixPairs(s);
     s.muscles = musclesOf(s.blocks);
     s.estMin = Math.round(sessionSeconds(s) / 60);
     return s;
@@ -542,7 +723,7 @@
 
   A.gen = {
     GOALS, LEVELS, LEVEL_NAMES, MOD, C, COOLDOWN, generate, alternatives, applySwap, adapt, applyGear, regear, gearFit, I, B, S, refresh, warmupFor,
-    itemSeconds, blockSeconds, sessionSeconds, cardioSeconds, repsAvg, repsTop, repsLow,
+    itemSeconds, blockSeconds, sessionSeconds, cardioSeconds, repsAvg, repsTop, repsLow, runs, ssLabels,
   };
 
   // ---------- Progression : historique, charges suggérées, volume ----------
