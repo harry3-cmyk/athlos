@@ -10,6 +10,11 @@
     if (!s) { location.hash = '#/record'; return; }
     let editing = s.source === 'custom';
     const checks = A.state.checks = A.state.checks && A.state.checks.id === s.id ? A.state.checks : { id: s.id, sets: {}, kg: {} };
+    const P = A.store.data.profile;
+    const sameEq = (a, b) => !!a && !!b && a.length === b.length && a.every(x => b.includes(x));
+    // Séance type, plan, favori… : on l'adapte au matériel du jour
+    if (s.setup !== P.setup || !sameEq(s.eq, P.equipment)) G.adapt(s, P.setup, P.equipment);
+    const edited = () => { s.orig = null; };
 
     function render() {
       G.refresh(s);
@@ -27,6 +32,9 @@
         <div class="sess-head">
           <div class="chips"><span class="tag accent">${ui.icon('clock', 'sm')} ≈ ${s.estMin} min</span>${goal ? `<span class="tag">${goal}</span>` : ''}
             ${(s.muscles || []).slice(0, 6).map(m => `<span class="tag">${A.mName(m)}</span>`).join('')}${s.weak ? `<span class="tag warn">Priorité ${A.mName(s.weak)}</span>` : ''}</div>
+          <div class="card setup-bar mt"><span class="accent">${ui.icon((A.setupById(s.setup) || { icon: 'sliders' }).icon)}</span>
+            <span class="grow small">Matériel : <b>${ui.esc(A.setupName(s.setup))}</b>${s.adaptNote ? `<br><span class="muted">${ui.esc(s.adaptNote)}</span>` : ''}</span>
+            <button class="btn sm no-print" data-chsetup>Changer</button></div>
           ${s.missing && s.missing.length ? `<div class="note warn mt">${ui.icon('info')}<span>Aucun exercice disponible avec ton matériel pour : <b>${s.missing.map(A.mName).join(', ')}</b>. Ajoute du matériel dans le questionnaire ou ton profil.</span></div>` : ''}
           ${s.skipped && s.skipped.length ? `<div class="note mt">${ui.icon('clock')}<span>En ${s.params ? s.params.duration : s.estMin} min, priorité aux exercices les plus rentables : pas le temps de travailler aussi <b>${s.skipped.map(A.mName).join(', ')}</b>. Choisis plus de temps ou moins de zones pour les inclure.</span></div>` : ''}
           ${s.notes && s.notes.length ? `<details class="card mt"><summary class="row between"><span class="row gap-s"><span class="accent">${ui.icon('flask')}</span><b>Pourquoi cette séance ?</b></span>${ui.icon('down')}</summary>
@@ -78,6 +86,7 @@
           <div class="item-name" data-info="${ex.id}">${ui.esc(ex.n)}${ex.uni ? ' <span class="small faint">(par côté)</span>' : ''}</div>
           <div class="item-meta">${cmp().itemMeta(it, b)}</div>
           ${it.load ? `<div class="small muted mt-s">${ui.esc(it.load)}</div>` : ''}
+          ${it.gearNote ? `<div class="small faint mt-s">${ui.esc(it.gearNote)}</div>` : ''}
           ${sug && (sug.w || sug.r) ? `<div class="item-sugg">${ui.icon('bolt', 'sm')} ${sug.w ? ui.num(sug.w, 1) + ' kg' : '+1 rep'} · ${ui.esc(sug.why)}</div>` : ''}
           ${it.note ? `<p class="small faint mt-s">${ui.esc(it.note)}</p>` : ''}
           ${editing ? `<div class="edit-row">
@@ -114,7 +123,7 @@
               const sets = b.kind === 'circuit' ? b.rounds : it.sets;
               const sug = A.prog.suggest(it, 0);
               return `<tr><td class="ex"><b>${++n}. ${ui.esc(ex.n)}</b>${it.note ? `<span class="tiny muted">${ui.esc(it.note)}</span>` : ''}</td>
-                <td class="small">${sets} × ${it.hold ? it.hold + ' s' : ui.esc(it.reps)}${b.kind !== 'circuit' && it.rest ? `<br><span class="muted">repos ${cmp().restLabel(it.rest)}</span>` : ''}${it.rir ? `<br><span class="muted">RIR ${ui.esc(it.rir)}</span>` : ''}</td>
+                <td class="small">${sets} × ${it.hold ? it.hold + ' s' : ui.esc(it.reps)}${b.kind !== 'circuit' && it.rest ? `<br><span class="muted">repos ${cmp().restLabel(it.rest)}</span>` : ''}${it.rir ? `<br><span class="muted">RIR ${ui.esc(it.rir)}</span>` : ''}${it.band || it.vest ? `<br><span class="muted">${ui.esc(it.load)}</span>` : ''}</td>
                 <td>${ex.hold || (ex.bw && !sug) ? '' : `<input class="w-kg" type="number" step="0.5" inputmode="decimal" data-kg="${key}" value="${checks.kg[key] ?? (sug && sug.w ? sug.w : '')}" placeholder="kg">`}</td>
                 <td><div class="w-checks">${Array.from({ length: sets }, (_, i) => box(key, i)).join('')}</div></td></tr>`;
             }).join('')}</tbody></table>`).join('')}
@@ -133,6 +142,7 @@
           let b = s.blocks.find(x => x.kind !== 'cardio' && x.kind !== 'circuit');
           if (!b) { b = G.B('hyper', 'Exercices', []); const ci = s.blocks.findIndex(x => x.kind === 'cardio'); ci < 0 ? s.blocks.push(b) : s.blocks.splice(ci, 0, b); }
           b.items.push(ex.hold ? G.I(id, 3, 30, 60) : G.I(id, 3, ex.t === 'comp' ? '8-10' : '10-15', ex.t === 'comp' ? 150 : 90, { rir: '1-2' }));
+          edited(); G.regear(s);
           render();
         },
       });
@@ -172,8 +182,9 @@
           <div class="pick-list">${alts.map(ex => `<button class="pick" data-id="${ex.id}"><div class="grow"><div class="pk-n">${ui.esc(ex.n)}</div><div class="pk-m">${ex.m.map(A.mName).join(', ')}</div></div>${ex.str ? '<span class="tag accent">Étirement</span>' : ''}</button>`).join('') || '<p class="empty small">Aucune alternative avec ton matériel.</p>'}</div>
           <button class="btn ghost block mt" data-all>${ui.icon('list')} Voir tous les exercices</button>`,
         onMount(body, close) {
-          body.querySelector('.pick-list').onclick = e => { const b = e.target.closest('[data-id]'); if (b) { G.applySwap(it, b.dataset.id); close(); render(); } };
-          body.querySelector('[data-all]').onclick = () => { close(); cmp().exPicker({ title: 'Remplacer par…', muscle: A.exById(it.exId).m[0], onPick: id => { G.applySwap(it, id); render(); } }); };
+          const done = id => { G.applySwap(it, id); edited(); G.regear(s); render(); };
+          body.querySelector('.pick-list').onclick = e => { const b = e.target.closest('[data-id]'); if (b) { close(); done(b.dataset.id); } };
+          body.querySelector('[data-all]').onclick = () => { close(); cmp().exPicker({ title: 'Remplacer par…', muscle: A.exById(it.exId).m[0], onPick: done }); };
         },
       });
     }
@@ -211,9 +222,13 @@
         if (ds.addcardio != null) { addCardio(); return; }
         if (ds.edit != null) { editing = !editing; render(); return; }
         if (ds.swap) { swap(ds.swap); return; }
-        if (ds.del) { const { b, ii } = at(ds.del); b.items.splice(ii, 1); s.blocks = s.blocks.filter(x => x.items.length || x.kind === 'hyper'); render(); return; }
-        if (ds.up) { const { b, ii } = at(ds.up); if (ii > 0) { [b.items[ii - 1], b.items[ii]] = [b.items[ii], b.items[ii - 1]]; render(); } return; }
-        if (ds.sets) { const { it } = at(ds.sets); it.sets = ui.clamp(it.sets + Number(ds.d), 1, 10); render(); return; }
+        if (ds.chsetup != null) {
+          cmp().setupSheet(id => { G.adapt(s, id, A.store.data.profile.equipment); render(); if (s.adaptNote) ui.toast(s.adaptNote); });
+          return;
+        }
+        if (ds.del) { const { b, ii } = at(ds.del); b.items.splice(ii, 1); s.blocks = s.blocks.filter(x => x.items.length || x.kind === 'hyper'); edited(); render(); return; }
+        if (ds.up) { const { b, ii } = at(ds.up); if (ii > 0) { [b.items[ii - 1], b.items[ii]] = [b.items[ii], b.items[ii - 1]]; edited(); render(); } return; }
+        if (ds.sets) { const { it } = at(ds.sets); it.sets = ui.clamp(it.sets + Number(ds.d), 1, 10); edited(); render(); return; }
         if (ds.ck) {
           const arr = checks.sets[ds.ck] = checks.sets[ds.ck] || [];
           arr[Number(ds.i)] = !arr[Number(ds.i)];
@@ -221,7 +236,7 @@
           t.textContent = arr[Number(ds.i)] ? '✓' : Number(ds.i) + 1;
           return;
         }
-        if (ds.regen != null) { A.state.draft = G.generate(Object.assign({}, s.params, { seed: 0 })); A.views.session(el); ui.toast('Nouvelle proposition générée'); return; }
+        if (ds.regen != null) { A.state.draft = G.generate(Object.assign({}, s.params, { seed: 0, setup: P.setup, equipment: P.equipment.slice(), gear: undefined })); A.views.session(el); ui.toast('Nouvelle proposition générée'); return; }
         if (ds.fav != null) { const f = ui.clone(s); f.source = f.source === 'quiz' ? 'favori' : f.source; A.store.data.favorites.unshift(f); A.store.save(); ui.toast('Ajoutée à « Mes séances »'); return; }
         if (ds.rename != null) {
           ui.sheet({ title: 'Nom de la séance', html: `<input data-n value="${ui.esc(s.title)}"><button class="btn primary block mt" data-ok>Valider</button>`,
@@ -235,6 +250,7 @@
         else if (ds.rest) at(ds.rest).it.rest = Number(t.value);
         else if (ds.kg) { checks.kg[ds.kg] = t.value; return; }
         else return;
+        edited();
         G.refresh(s);
         const chip = el.querySelector('.sess-head .tag.accent');
         if (chip) chip.innerHTML = `${ui.icon('clock', 'sm')} ≈ ${s.estMin} min`;

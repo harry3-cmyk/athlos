@@ -12,14 +12,27 @@
 
   A.views.profile = function (el) {
     const d = A.store.data, P = d.profile;
+    const kgStr = l => (l || []).map(w => String(w).replace('.', ',')).join(', ');
     function render() {
-      const eq = new Set(P.equipment);
+      const g = P.gear || {};
       el.innerHTML = `<div class="page-head"><h1>Profil</h1></div>
         <div class="card">
           <label class="field"><span>Prénom ou pseudo</span><input data-p="name" value="${ui.esc(P.name)}" placeholder="Ton prénom"></label>
           <label class="field"><span>Poids de corps (kg)</span><input data-p="bodyweight" type="number" step="0.1" inputmode="decimal" value="${P.bodyweight ?? ''}"></label>
           <div class="field"><span class="small muted">Niveau</span><div class="seg mt-s" data-lvl>${Object.entries(G.LEVEL_NAMES).map(([k, n]) => `<button class="${P.level === k ? 'on' : ''}" data-k="${k}">${n}</button>`).join('')}</div></div>
-          <div class="field"><span class="small muted">Matériel disponible par défaut</span><div class="chips mt-s" data-eq>${Object.entries(D.EQUIP).map(([k, n]) => `<button class="chip ${eq.has(k) ? 'on' : ''}" data-k="${k}">${eq.has(k) ? ui.icon('check', 'sm') : ''}${n}</button>`).join('')}</div></div>
+        </div>
+
+        <div class="section-title"><h2>Mon matériel</h2></div>
+        <div class="card"><p class="small muted mb">Ce que tu as avec toi en ce moment. Tu peux aussi le changer à chaque séance depuis « Enregistrer ».</p>
+          <div data-setups>${A.cmp.setupCards(P.setup)}</div>
+          <h3 class="mt-l">Mes charges</h3>
+          <p class="small muted mt-s">Utilisées hors salle : Athlos choisit les exercices adaptés à ces poids et ajuste les répétitions et le tempo.</p>
+          <div class="grid2 md3 mt">
+            <label class="field"><span>Mes haltères (kg)</span><input data-gear="halteres" inputmode="decimal" value="${kgStr(g.halteres)}" placeholder="15"></label>
+            <label class="field"><span>Mes élastiques (kg)</span><input data-gear="elastique" inputmode="decimal" value="${kgStr(g.elastique)}" placeholder="35, 45"></label>
+            <label class="field"><span>Mon gilet lesté (kg)</span><input data-gear="gilet" inputmode="decimal" value="${kgStr(g.gilet)}" placeholder="10"></label>
+          </div>
+          <p class="tiny faint">Plusieurs valeurs possibles, séparées par une virgule et un espace : « 35, 45 ».</p>
         </div>
 
         <div class="section-title"><h2>Mes maximums (1RM)</h2></div>
@@ -52,11 +65,13 @@
       el.querySelectorAll('[data-toggle]').forEach(i => { i.onchange = () => { P[i.dataset.toggle] = i.checked; A.store.save(); }; });
       el.querySelector('[data-lvl]').onclick = e => { const b = e.target.closest('[data-k]'); if (b) { P.level = b.dataset.k; A.store.save(); render(); } };
       el.querySelector('[data-theme]').onclick = e => { const b = e.target.closest('[data-k]'); if (b) { P.theme = b.dataset.k; A.store.save(); A.applyTheme(); render(); } };
-      el.querySelector('[data-eq]').onclick = e => {
-        const b = e.target.closest('[data-k]'); if (!b) return;
-        const s = new Set(P.equipment); s.has(b.dataset.k) ? s.delete(b.dataset.k) : s.add(b.dataset.k);
-        P.equipment = [...s]; A.store.save(); render();
-      };
+      el.querySelector('[data-setups]').onclick = e => { const b = e.target.closest('[data-setup]'); if (b) { A.cmp.useSetup(b.dataset.setup); render(); } };
+      el.querySelectorAll('[data-gear]').forEach(i => {
+        i.onchange = () => {
+          P.gear = Object.assign({}, P.gear, { [i.dataset.gear]: A.cmp.parseKg(i.value) });
+          A.store.save(); ui.toast('Charges enregistrées'); render();
+        };
+      });
       el.querySelector('[data-export]').onclick = () => {
         const data = Object.assign({}, A.store.data, { active: null });
         ui.download(`athlos-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 1));

@@ -43,6 +43,7 @@
         ${f.hint ? `<span class="tiny faint">${f.hint}</span>` : ''}</label>`).join('');
       el.innerHTML = `<div class="page-head"><a class="back" href="#/improve" aria-label="Retour">${ui.icon('left')}</a><h1>${ui.esc(T.n)}</h1></div>
         <p class="muted">${ui.esc(T.intro)}</p>
+        ${T.kind === 'barbell' && !d.profile.equipment.includes('barre') ? `<div class="note warn mt">${ui.icon('info')}<span>Ce plan est prévu avec une barre et des disques. Avec ton matériel actuel (<b>${ui.esc(A.setupName(d.profile.setup))}</b>), les séances seront adaptées automatiquement, mais les charges en % du 1RM ne s'appliqueront plus.</span></div>` : ''}
         <div class="card mt">
           ${fields}
           ${T.weak ? `<div class="field"><span class="small muted">Où bloques-tu ?</span><div class="stack mt-s" data-weak>${T.weak.map(w => `<button class="opt ${inp.weak === w.v ? 'on' : ''}" data-w="${w.v}" style="width:100%"><span style="font-weight:650">${ui.esc(w.n)}</span>${inp.weak === w.v ? `<span class="opt-d">${ui.esc(w.tip)}</span>` : ''}</button>`).join('')}</div></div>` : ''}

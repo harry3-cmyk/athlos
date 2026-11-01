@@ -30,7 +30,7 @@
     const sport = h.sport && A.SPORTS ? (A.SPORTS.find(s => s[0] === h.sport) || [])[1] : null;
     const load = h.rpe ? Math.round(h.rpe * h.durationSec / 60) : null;
     el.innerHTML = `<div class="page-head"><a class="back" href="#/history" aria-label="Retour">${ui.icon('left')}</a><h1>${ui.esc(h.title)}</h1></div>
-      <p class="muted">${ui.fmtDate(h.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${ui.fmtTime(h.date)}${sport ? ' · ' + sport : ''}${h.mode === 'written' ? ' · version écrite' : ''}</p>
+      <p class="muted">${ui.fmtDate(h.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${ui.fmtTime(h.date)}${sport ? ' · ' + sport : ''}${h.setup ? ' · ' + ui.esc(h.setup) : ''}${h.mode === 'written' ? ' · version écrite' : ''}</p>
       <div class="grid4 mt">
         <div class="stat"><div class="v">${ui.fmtDur(h.durationSec)}</div><div class="l">Durée</div></div>
         ${h.volume ? `<div class="stat"><div class="v">${ui.num(h.volume)}<small>kg</small></div><div class="l">Volume</div></div>` : ''}

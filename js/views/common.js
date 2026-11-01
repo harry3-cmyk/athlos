@@ -14,6 +14,34 @@
     return b.join(' ');
   };
 
+  // ——— Matériel avec moi ———
+  cmp.setupCards = current => `<div class="setup-grid">${D.SETUPS.map(s => `<button class="opt setup ${current === s.id ? 'on' : ''}" data-setup="${s.id}">
+      <span class="row gap-s"><span class="accent">${ui.icon(s.icon)}</span><span class="opt-t">${ui.esc(s.n)}</span></span>
+      <span class="opt-d">${ui.esc(A.setupDesc(s.id, s.eq))}</span></button>`).join('')}</div>`;
+
+  cmp.setupChips = current => `<div class="chips">${D.SETUPS.map(s => `<button class="chip ${current === s.id ? 'on' : ''}" data-setup="${s.id}">${ui.icon(s.icon, 'sm')}${ui.esc(s.n)}</button>`).join('')}</div>`;
+
+  // Enregistre le matériel du jour dans le profil
+  cmp.useSetup = id => {
+    const s = A.setupById(id);
+    if (!s) return;
+    const P = A.store.data.profile;
+    P.setup = id;
+    P.equipment = s.eq.slice();
+    A.store.save();
+  };
+
+  cmp.setupSheet = onDone => ui.sheet({
+    title: 'Ton matériel',
+    html: `<p class="small muted mb">La séance s'adapte : exercices remplacés si besoin, charges et répétitions ajustées.</p>${cmp.setupCards(A.store.data.profile.setup)}`,
+    onMount(body, close) {
+      body.onclick = e => { const b = e.target.closest('[data-setup]'); if (!b) return; cmp.useSetup(b.dataset.setup); close(); onDone(b.dataset.setup); };
+    },
+  });
+
+  // « 35, 45 » ou « 12,5 » → [35, 45] / [12.5]
+  cmp.parseKg = str => (String(str || '').match(/\d+(?:[.,]\d(?!\d))?/g) || []).map(x => Number(x.replace(',', '.'))).filter(x => x > 0);
+
   cmp.restLabel = s => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s} s`);
 
   cmp.itemMeta = (it, block) => {
