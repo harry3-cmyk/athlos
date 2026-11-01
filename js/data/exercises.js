@@ -34,19 +34,24 @@
   ];
 
   const EQUIP = {
-    barre: 'Barre & rack', halteres: 'Haltères', banc: 'Banc', machine: 'Machines',
-    poulie: 'Poulies', kb: 'Kettlebell', traction: 'Barre de traction / dips', elastique: 'Élastiques',
+    barre: 'Barre & rack', halteres: 'Haltères', banc: 'Banc incliné', machine: 'Machines',
+    poulie: 'Poulies', kb: 'Kettlebell', traction: 'Barre de traction', dips: 'Barres à dips',
+    elastique: 'Élastiques', gilet: 'Gilet lesté',
   };
-  const EQUIP_PRESETS = [
-    { id: 'salle', n: 'Salle complète', eq: Object.keys(EQUIP) },
-    { id: 'maison', n: 'Maison (haltères)', eq: ['halteres', 'banc', 'elastique'] },
-    { id: 'outdoor', n: 'Extérieur / militaire', eq: ['traction'] },
-    { id: 'pdc', n: 'Poids du corps', eq: [] },
+
+  // Ce que j'ai avec moi : la salle donne accès à tout, les autres utilisent mon matériel personnel (profil.gear)
+  const SETUPS = [
+    { id: 'salle', n: 'Salle complète', icon: 'dumbbell', eq: Object.keys(EQUIP).filter(e => e !== 'gilet') },
+    { id: 'street', n: 'Street workout', icon: 'body', eq: ['traction', 'dips'] },
+    { id: 'maison', n: 'Maison équipée', icon: 'home', eq: ['traction', 'dips', 'banc', 'halteres', 'elastique'] },
+    { id: 'gilet', n: 'Tractions + gilet lesté', icon: 'shield', eq: ['traction', 'gilet'] },
+    { id: 'pdc', n: 'Rien (poids du corps)', icon: 'run', eq: [] },
   ];
 
   // m : muscles principaux · s : secondaires · eq : matériel requis · t : comp|iso|core|carry|pliom|mob
   // p : schéma moteur · heavy : adapté aux charges lourdes · str : accent position étirée
   // bw : poids du corps · hold : exercice tenu (secondes) · uni : unilatéral · lvl : niveau min · pr : priorité
+  // ld : charge typique avec haltères / élastique (L légère, M moyenne, H lourde) · vest : se leste avec un gilet
   const EX = [
     // ——— Pectoraux
     { id: 'bench', n: 'Développé couché (barre)', m: ['pectoraux'], s: ['triceps', 'epaules'], eq: ['barre', 'banc'], t: 'comp', p: 'press_h', heavy: 1, pr: 10, cue: "Omoplates serrées et basses, pieds ancrés, barre sur le bas des pecs, coudes à 45-70° du buste." },
@@ -56,7 +61,7 @@
     { id: 'bench_db', n: 'Développé couché (haltères)', m: ['pectoraux'], s: ['triceps', 'epaules'], eq: ['halteres', 'banc'], t: 'comp', p: 'press_h', str: 1, pr: 8, cue: "Plus d'amplitude qu'à la barre : descends jusqu'à sentir l'étirement des pecs, coudes sous les poignets." },
     { id: 'incline_bar', n: 'Développé incliné (barre)', m: ['pectoraux'], s: ['epaules', 'triceps'], eq: ['barre', 'banc'], t: 'comp', p: 'press_h', heavy: 1, lvl: 2, pr: 7, cue: "Banc à 30-45°, barre sur le haut de la poitrine, omoplates rétractées." },
     { id: 'chest_press', n: 'Chest press (machine)', m: ['pectoraux'], s: ['triceps', 'epaules'], eq: ['machine'], t: 'comp', p: 'press_h', pr: 6, cue: "Règle le siège pour que les poignées soient à mi-poitrine ; idéal pour aller près de l'échec en sécurité." },
-    { id: 'dips', n: 'Dips (buste penché)', m: ['pectoraux', 'triceps'], s: ['epaules'], eq: ['traction'], t: 'comp', p: 'dip', bw: 1, heavy: 1, lvl: 2, pr: 7, cue: "Buste légèrement penché, descends jusqu'à ce que les épaules passent sous les coudes, sans douleur." },
+    { id: 'dips', n: 'Dips (buste penché)', m: ['pectoraux', 'triceps'], s: ['epaules'], eq: ['dips'], t: 'comp', p: 'dip', bw: 1, heavy: 1, lvl: 2, pr: 7, cue: "Buste légèrement penché, descends jusqu'à ce que les épaules passent sous les coudes, sans douleur." },
     { id: 'pushup', n: 'Pompes', m: ['pectoraux'], s: ['triceps', 'epaules', 'abdos'], eq: [], t: 'comp', p: 'press_h', bw: 1, pr: 6, cue: "Corps gainé comme une planche, mains un peu plus larges que les épaules, poitrine jusqu'au sol." },
     { id: 'pushup_deficit', n: 'Pompes en déficit (mains surélevées)', m: ['pectoraux'], s: ['triceps', 'epaules'], eq: [], t: 'comp', p: 'press_h', bw: 1, str: 1, lvl: 2, pr: 6, cue: "Mains sur deux supports stables (livres, disques) pour descendre plus bas que les mains : plus d'étirement." },
     { id: 'pushup_incline', n: 'Pompes inclinées (mains surélevées)', m: ['pectoraux'], s: ['triceps'], eq: [], t: 'comp', p: 'press_h', bw: 1, pr: 2, cue: "Mains sur un banc ou une table : plus c'est haut, plus c'est facile. Baisse la hauteur chaque semaine." },
@@ -217,14 +222,55 @@
     { id: 'deep_squat_hold', n: 'Squat profond tenu', m: ['adducteurs', 'quadriceps'], s: ['mollets'], eq: [], t: 'mob', hold: 1, bw: 1, pr: 5, cue: "Descends au plus bas, talons au sol, coudes qui poussent les genoux vers l'extérieur." },
   ];
 
-  EX.forEach(e => { e.s = e.s || []; e.lvl = e.lvl || 1; e.pr = e.pr || 5; });
+  // Charge typique par exercice, pour choisir quoi faire avec des haltères ou des élastiques de poids fixe
+  const LOAD = {
+    L: ['db_fly', 'lat_raise', 'rear_fly', 'band_lat_raise', 'band_pull_apart'],
+    H: ['farmer', 'suitcase', 'shrug_db', 'row_db', 'hip_thrust_db', 'goblet', 'rdl_db', 'sumo_squat', 'pullup_band', 'band_row'],
+  };
+  // Exercices au poids du corps qui se lestent avec un gilet
+  const VEST = ['pullup', 'chinup', 'dips', 'pushup', 'pushup_deficit', 'diamond', 'pike_pushup', 'inverted_row', 'air_squat',
+    'reverse_lunge', 'step_up', 'bulgarian_bw', 'pistol', 'plank', 'glute_bridge', 'calf_single', 'cossack'];
+
+  EX.forEach(e => {
+    e.s = e.s || []; e.lvl = e.lvl || 1; e.pr = e.pr || 5;
+    if (e.eq.includes('halteres') || e.eq.includes('elastique')) e.ld = LOAD.L.includes(e.id) ? 'L' : LOAD.H.includes(e.id) ? 'H' : 'M';
+    if (VEST.includes(e.id)) e.vest = 1;
+  });
   const MAP = {};
   EX.forEach(e => { MAP[e.id] = e; });
 
-  A.DATA = Object.assign(A.DATA || {}, { MUSCLES, PRESETS, EQUIP, EQUIP_PRESETS, EX });
+  A.DATA = Object.assign(A.DATA || {}, { MUSCLES, PRESETS, EQUIP, SETUPS, EX });
 
   // Exercices de la base + exercices personnalisés de l'utilisateur
   A.exList = () => EX.concat((A.store.data.customEx || []));
   A.exById = id => MAP[id] || (A.store.data.customEx || []).find(e => e.id === id) || null;
   A.mName = id => (MUSCLES[id] ? MUSCLES[id].n : id);
+
+  // ——— Matériel avec moi ———
+  const kgList = l => l.map(w => String(w).replace('.', ',')).join(' et ');
+  A.setupById = id => SETUPS.find(s => s.id === id) || null;
+  A.setupName = id => (A.setupById(id) ? A.setupById(id).n : 'Matériel personnalisé');
+  // Charges fixes de mon matériel personnel, limitées à ce qui est présent (aucune en salle complète)
+  A.gearFor = (setupId, eq) => {
+    if (setupId === 'salle') return null;
+    const g = A.store.data.profile.gear || {}, has = new Set(eq), out = {};
+    ['halteres', 'elastique', 'gilet'].forEach(k => { if (has.has(k) && g[k] && g[k].length) out[k] = g[k].slice(); });
+    return Object.keys(out).length ? out : null;
+  };
+  A.setupDesc = (setupId, eq) => {
+    if (setupId === 'salle') return 'Accès à tout le matériel : barres, haltères, machines, poulies.';
+    const g = A.store.data.profile.gear || {}, has = new Set(eq);
+    const parts = [];
+    if (has.has('traction')) parts.push('tractions');
+    if (has.has('dips')) parts.push('dips');
+    parts.push('pompes', 'abdos');
+    if (has.has('banc')) parts.push('banc incliné');
+    if (has.has('halteres')) parts.push(g.halteres && g.halteres.length ? `2 haltères de ${kgList(g.halteres)} kg` : 'haltères');
+    if (has.has('elastique')) parts.push(g.elastique && g.elastique.length ? `élastiques de ${kgList(g.elastique)} kg` : 'élastiques');
+    if (has.has('gilet')) parts.push(g.gilet && g.gilet.length ? `gilet lesté de ${kgList(g.gilet)} kg` : 'gilet lesté');
+    ['barre', 'machine', 'poulie', 'kb'].forEach(k => { if (has.has(k)) parts.push(EQUIP[k].toLowerCase()); });
+    if (!eq.length) return 'Juste toi et le sol : pompes, squats, gainage…';
+    const t = parts.join(', ');
+    return t.charAt(0).toUpperCase() + t.slice(1) + '.';
+  };
 })(window.A);
