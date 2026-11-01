@@ -1,5 +1,5 @@
 /* Athlos — service worker : l'app fonctionne hors ligne une fois chargée */
-const CACHE = 'athlos-v2';
+const CACHE = 'athlos-v3';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
   'js/core.js', 'js/data/exercises.js', 'js/data/science.js', 'js/generator.js', 'js/data/programs.js', 'js/body.js',

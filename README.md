@@ -8,7 +8,8 @@ Application web de sport (installable sur téléphone) : séances générées à
 
 - **Enregistrer** : quatre façons de démarrer
   - **Crée ma séance** : questionnaire (temps disponible 30 min → 2 h, objectif force / hypertrophie / endurance / mixte / un peu de tout, zones à travailler sur un corps de face et de dos, point faible prioritaire, matériel et niveau). Le générateur construit la séance : échauffement, blocs, séries, reps, RIR, temps de repos, retour au calme.
-  - **Je sais ce que je veux faire** : séances types (Push/Pull/Legs, full body débutant, circuit militaire, Murph, force tactique, zone 2, 4×4 norvégien, 30/30, Tabata, Big 3 de McGill, prévention, mobilité), construction libre ou séance passée à refaire.
+  - **Je sais ce que je veux faire** : 22 séances types (Push/Pull/Legs, full body débutant et intermédiaire, bras, épaules, German Volume Training, circuit militaire, Murph, force tactique, test militaire, kettlebell Simple & Sinister, zone 2, 4×4 norvégien, 30/30, Tabata, Big 3 de McGill, prévention, mobilité), construction libre ou séance passée à refaire.
+  - Les séances générées remplissent le temps choisi avec des **supersets A1/A2** (muscles opposés ou non concurrents, repos complet pour chaque muscle) et plusieurs exercices par grand muscle, dans la limite du volume utile par séance.
   - **M'améliorer sur un exercice** : plans de 6 semaines pour le développé couché, le squat, le soulevé de terre, le développé militaire, les tractions, les pompes, la course 5/10 km, le Luc Léger et le gainage, avec exercices choisis selon ton point de blocage.
   - **Ajouter une activité** faite sans l'app (course, vélo, sport collectif…).
 - **Deux modes de séance** : version écrite (imprimable, cases à cocher) ou **mode guidé** (série en cours, charges suggérées, chrono de repos automatique avec bip et vibration, minuteurs d'intervalles, maintiens chronométrés, remplacement d'exercice, bilan final avec records).
