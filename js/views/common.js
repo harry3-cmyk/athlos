@@ -44,13 +44,15 @@
 
   cmp.restLabel = s => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s} s`);
 
-  cmp.itemMeta = (it, block) => {
+  // ss : position dans un superset ({ lab: 'A1', next: 'A2' }), d'après A.gen.ssLabels
+  cmp.itemMeta = (it, block, ss) => {
     if (it.type === 'cardio') return cmp.cardioMeta(it);
     const parts = [];
     const sets = block && block.kind === 'circuit' ? `${block.rounds} tours` : `${it.sets} séries`;
     parts.push(`<b>${sets}</b>`);
     parts.push(it.hold ? `<b>${it.hold} s</b>` : `<b>${ui.esc(it.reps)}</b> reps`);
-    if (!(block && block.kind === 'circuit') && it.rest) parts.push(`repos ${cmp.restLabel(it.rest)}`);
+    if (ss && ss.next) parts.push(`puis ${ss.next}`);
+    else if (!(block && block.kind === 'circuit') && it.rest) parts.push(`repos ${cmp.restLabel(it.rest)}${ss ? ' après la paire' : ''}`);
     if (it.rir) parts.push(`RIR ${ui.esc(it.rir)}`);
     return parts.map(p => `<span>${p}</span>`).join('');
   };

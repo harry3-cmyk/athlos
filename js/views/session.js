@@ -24,8 +24,13 @@
     }
 
     // ——— Mode aperçu / édition ———
+    // Une série de A1, ~30 s pour changer de poste, une série de A2, puis le repos de la paire
+    const SS_NOTE = "A1 / A2 : superset. Une série de A1, ~30 s pour changer de poste, une série de A2, puis le repos indiqué. Chaque muscle garde son repos complet.";
+    const hasSS = b => b.items.some(it => it.ss != null);
+
     function editHTML() {
       const goal = s.goal && G.GOALS[s.goal] ? G.GOALS[s.goal].n : null;
+      const SS = G.ssLabels(s);
       let n = 0;
       return `<div class="page-head no-print"><a class="back" href="#/record" aria-label="Retour">${ui.icon('left')}</a>
           <h1 data-title>${ui.esc(s.title)}</h1><button class="icon-btn" data-rename aria-label="Renommer">${ui.icon('edit')}</button></div>
@@ -53,7 +58,8 @@
           <div class="block-h"><h3>${ui.esc(b.title)}</h3><span class="line"></span><span class="tag">${KIND[b.kind] || ''}</span>${b.optional ? '<span class="tag">facultatif</span>' : ''}</div>
           ${b.kind === 'circuit' ? `<p class="small muted mb">${b.rounds} tours · repos ${b.restEx} s entre exercices, ${cmp().restLabel(b.restRound)} entre les tours</p>` : ''}
           ${b.note ? `<p class="small muted mb">${ui.esc(b.note)}</p>` : ''}
-          ${b.items.map((it, ii) => itemHTML(it, b, bi, ii, ++n)).join('') || '<p class="small muted">Aucun exercice pour l\'instant.</p>'}
+          ${hasSS(b) ? `<p class="small muted mb">${ui.esc(SS_NOTE)}</p>` : ''}
+          ${b.items.map((it, ii) => itemHTML(it, b, bi, ii, ++n, SS[`${bi}-${ii}`])).join('') || '<p class="small muted">Aucun exercice pour l\'instant.</p>'}
         </div>`).join('')}
 
         <div class="row gap wrap mt no-print">
@@ -71,7 +77,7 @@
         </div>`;
     }
 
-    function itemHTML(it, b, bi, ii, n) {
+    function itemHTML(it, b, bi, ii, n, ss) {
       const key = `${bi}-${ii}`;
       if (it.type === 'cardio') {
         return `<div class="item"><span class="num">${ui.icon('run', 'sm')}</span><div class="grow"><div class="item-name">${ui.esc(it.name)}</div>
@@ -82,9 +88,9 @@
       const ex = A.exById(it.exId);
       if (!ex) return '';
       const sug = A.prog.suggest(it, 0);
-      return `<div class="item ${it.weak ? 'weak' : ''}"><span class="num">${n}</span><div class="grow">
+      return `<div class="item ${it.weak ? 'weak' : ''} ${ss ? 'ss' : ''} ${ss && ss.next ? 'ss-first' : ''}"><span class="num">${ss ? ss.lab : n}</span><div class="grow">
           <div class="item-name" data-info="${ex.id}">${ui.esc(ex.n)}${ex.uni ? ' <span class="small faint">(par côté)</span>' : ''}</div>
-          <div class="item-meta">${cmp().itemMeta(it, b)}</div>
+          <div class="item-meta">${cmp().itemMeta(it, b, ss)}</div>
           ${it.load ? `<div class="small muted mt-s">${ui.esc(it.load)}</div>` : ''}
           ${it.gearNote ? `<div class="small faint mt-s">${ui.esc(it.gearNote)}</div>` : ''}
           ${sug && (sug.w || sug.r) ? `<div class="item-sugg">${ui.icon('bolt', 'sm')} ${sug.w ? ui.num(sug.w, 1) + ' kg' : '+1 rep'} · ${ui.esc(sug.why)}</div>` : ''}
@@ -105,6 +111,7 @@
 
     // ——— Version écrite ———
     function writtenHTML() {
+      const SS = G.ssLabels(s);
       let n = 0;
       const box = (key, i) => `<button class="w-check ${checks.sets[key] && checks.sets[key][i] ? 'on' : ''}" data-ck="${key}" data-i="${i}" aria-label="Série ${i + 1}">${checks.sets[key] && checks.sets[key][i] ? '✓' : i + 1}</button>`;
       return `<div class="row gap no-print mb"><button class="btn" data-back>${ui.icon('left')} Aperçu</button><span class="grow"></span>
@@ -115,6 +122,7 @@
           ${s.warmup && s.warmup.length ? `<h3 class="mt">Échauffement</h3><ul class="small" style="padding-left:18px;margin:6px 0 0">${s.warmup.map(w => `<li><b>${ui.esc(w.n)}</b> — ${ui.esc(w.d)}</li>`).join('')}</ul>` : ''}
           ${s.blocks.map((b, bi) => `<h3 class="mt-l">${ui.esc(b.title)}${b.kind === 'circuit' ? ` · ${b.rounds} tours` : ''}</h3>
             ${b.kind === 'circuit' ? `<p class="small muted">Repos ${b.restEx} s entre exercices, ${cmp().restLabel(b.restRound)} entre les tours.</p>` : ''}
+            ${hasSS(b) ? `<p class="small muted">${ui.esc(SS_NOTE)}</p>` : ''}
             <table class="w-table"><thead><tr><th>Exercice</th><th>Prescription</th><th>Charge</th><th>Séries faites</th></tr></thead><tbody>
             ${b.items.map((it, ii) => {
               const key = `${bi}-${ii}`;
@@ -122,8 +130,12 @@
               const ex = A.exById(it.exId); if (!ex) return '';
               const sets = b.kind === 'circuit' ? b.rounds : it.sets;
               const sug = A.prog.suggest(it, 0);
-              return `<tr><td class="ex"><b>${++n}. ${ui.esc(ex.n)}</b>${it.note ? `<span class="tiny muted">${ui.esc(it.note)}</span>` : ''}</td>
-                <td class="small">${sets} × ${it.hold ? it.hold + ' s' : ui.esc(it.reps)}${b.kind !== 'circuit' && it.rest ? `<br><span class="muted">repos ${cmp().restLabel(it.rest)}</span>` : ''}${it.rir ? `<br><span class="muted">RIR ${ui.esc(it.rir)}</span>` : ''}${it.band || it.vest ? `<br><span class="muted">${ui.esc(it.load)}</span>` : ''}</td>
+              const ss = SS[key];
+              ++n;
+              const rest = ss && ss.next ? `<br><span class="muted">puis ${ss.next}</span>`
+                : b.kind !== 'circuit' && it.rest ? `<br><span class="muted">repos ${cmp().restLabel(it.rest)}${ss ? ' après la paire' : ''}</span>` : '';
+              return `<tr><td class="ex"><b>${ss ? ss.lab : n}. ${ui.esc(ex.n)}</b>${it.note ? `<span class="tiny muted">${ui.esc(it.note)}</span>` : ''}</td>
+                <td class="small">${sets} × ${it.hold ? it.hold + ' s' : ui.esc(it.reps)}${rest}${it.rir ? `<br><span class="muted">RIR ${ui.esc(it.rir)}</span>` : ''}${it.band || it.vest ? `<br><span class="muted">${ui.esc(it.load)}</span>` : ''}</td>
                 <td>${ex.hold || (ex.bw && !sug) ? '' : `<input class="w-kg" type="number" step="0.5" inputmode="decimal" data-kg="${key}" value="${checks.kg[key] ?? (sug && sug.w ? sug.w : '')}" placeholder="kg">`}</td>
                 <td><div class="w-checks">${Array.from({ length: sets }, (_, i) => box(key, i)).join('')}</div></td></tr>`;
             }).join('')}</tbody></table>`).join('')}
@@ -247,7 +259,11 @@
         const t = e.target, ds = t.dataset;
         if (ds.reps) at(ds.reps).it.reps = t.value.trim() || '8-12';
         else if (ds.hold) at(ds.hold).it.hold = Math.max(5, Number(t.value) || 30);
-        else if (ds.rest) at(ds.rest).it.rest = Number(t.value);
+        else if (ds.rest) {
+          // Superset : le repos se prend après la paire, il vaut pour les deux exercices
+          const { b, it } = at(ds.rest);
+          b.items.forEach(x => { if (x === it || (it.ss != null && x.ss === it.ss)) { x.rest = Number(t.value); delete x.rest0; } });
+        }
         else if (ds.kg) { checks.kg[ds.kg] = t.value; return; }
         else return;
         edited();
