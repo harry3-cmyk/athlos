@@ -128,6 +128,7 @@
     { id: 'pallof', n: 'Pallof press (anti-rotation)', m: ['obliques'], s: ['abdos'], eq: ['poulie'], t: 'core', uni: 1, pr: 8, cue: "De profil à la poulie, pousse les mains devant le sternum et résiste à la rotation 2 s." },
     { id: 'pallof_band', n: 'Pallof press (élastique)', m: ['obliques'], s: ['abdos'], eq: ['elastique'], t: 'core', uni: 1, pr: 6, cue: "Élastique fixé à hauteur de poitrine, pousse et résiste à la rotation." },
     { id: 'woodchop', n: 'Bûcheron à la poulie', m: ['obliques'], s: ['abdos'], eq: ['poulie'], t: 'core', uni: 1, pr: 6, cue: "Rotation depuis les hanches et le thorax, bras quasi tendus, contrôle le retour." },
+    { id: 'tgu', n: 'Turkish get-up (kettlebell)', m: ['obliques', 'epaules'], s: ['abdos', 'fessiers'], eq: ['kb'], t: 'core', uni: 1, lvl: 2, pr: 5, cue: "Kettlebell bras tendu à la verticale, regard dessus : du sol à debout puis retour, étape par étape, lentement. Commence léger.", sci: "Pilier du programme Simple & Sinister de Pavel Tsatsouline : stabilité de l'épaule et gainage en mouvement." },
     { id: 'suitcase', n: 'Marche valise (charge d\'un seul côté)', m: ['obliques'], s: ['avant_bras', 'trapezes'], eq: ['halteres'], t: 'carry', p: 'carry', hold: 1, uni: 1, pr: 7, cue: "Une charge lourde d'un seul côté, reste parfaitement droit, ne penche pas." },
 
     // ——— Trapèzes
