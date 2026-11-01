@@ -4,14 +4,17 @@ window.A = window.A || {};
   'use strict';
 
   const KEY = 'athlos.v1';
-  const ALL_EQ = ['barre', 'halteres', 'banc', 'machine', 'poulie', 'kb', 'traction', 'elastique'];
+  const ALL_EQ = ['barre', 'halteres', 'banc', 'machine', 'poulie', 'kb', 'traction', 'dips', 'elastique', 'gilet'];
   A.ALL_EQ = ALL_EQ;
 
   function defaults() {
     return {
-      version: 1,
+      version: 2,
       profile: {
-        name: '', level: 'inter', bodyweight: null, equipment: ALL_EQ.slice(), cardio: 'auto',
+        name: '', level: 'inter', bodyweight: null, cardio: 'auto',
+        setup: 'salle', equipment: ALL_EQ.filter(e => e !== 'gilet'),
+        // Matériel personnel aux charges fixes (kg), utilisé hors salle
+        gear: { halteres: [15], elastique: [35, 45], gilet: [10] },
         sound: true, vibrate: true, theme: 'auto', orm: {},
       },
       history: [], favorites: [], customEx: [], plan: null, active: null, lastQuiz: null,
@@ -28,6 +31,12 @@ window.A = window.A || {};
           const d = JSON.parse(raw);
           this.data = Object.assign(defaults(), d);
           this.data.profile = Object.assign(defaults().profile, d.profile || {});
+          // v1 → v2 : les barres à dips deviennent un matériel à part entière
+          if ((d.version || 1) < 2) {
+            const eq = this.data.profile.equipment;
+            if (eq.includes('traction') && !eq.includes('dips')) eq.push('dips');
+            this.data.version = 2;
+          }
         }
       } catch (e) { console.warn('Athlos : lecture du stockage impossible', e); }
     },

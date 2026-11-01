@@ -65,6 +65,66 @@
       + (s.cooldown && s.cooldown.length ? (s.cooldownSec || 180) : 0);
   }
 
+  // ---------- Matériel à charge fixe : haltères, élastiques, gilet ----------
+  // Fourchettes de charge (kg) adaptées à un exercice léger, moyen ou lourd
+  const DB_RANGE = { L: [2, 12], M: [8, 24], H: [16, 60] };
+  const BAND_RANGE = { L: [3, 20], M: [12, 40], H: [30, 90] };
+  function fit(ld, ws, R) {
+    const [lo, hi] = R[ld || 'M'];
+    const ok = ws.filter(w => w >= lo && w <= hi);
+    if (ok.length) return { k: 'ok', w: ld === 'H' ? Math.max(...ok) : Math.min(...ok) };
+    if (ws.every(w => w > hi)) return { k: 'heavy', w: Math.min(...ws) };
+    return { k: 'light', w: Math.max(...ws) };
+  }
+  function gearFit(ex, gear) {
+    if (!gear || !ex) return null;
+    if (ex.eq.includes('halteres') && gear.halteres) return Object.assign({ kind: 'db' }, fit(ex.ld, gear.halteres, DB_RANGE));
+    if (ex.eq.includes('elastique') && gear.elastique) return Object.assign({ kind: 'band' }, fit(ex.ld, gear.elastique, BAND_RANGE));
+    return null;
+  }
+
+  // Indique quelle charge utiliser avec mon matériel et adapte les reps quand la charge ne peut pas changer
+  function applyGear(s, setupId, eq, gear) {
+    const has = new Set(eq || []);
+    const kg = w => ui.num(w, 1);
+    s.blocks.forEach(b => b.items.forEach(it => {
+      if (it.type === 'cardio') return;
+      if (it.gearLoad) { it.load = it.baseLoad; it.reps = it.baseReps ?? it.reps; }
+      ['fixedW', 'band', 'vest', 'vestOn', 'gearNote', 'gearLoad', 'baseLoad', 'baseReps'].forEach(k => delete it[k]);
+      const ex = A.exById(it.exId);
+      if (!ex) return;
+      const gf = gearFit(ex, gear);
+      const set = (load, reps) => {
+        it.baseLoad = it.load; it.baseReps = it.reps; it.gearLoad = true;
+        it.load = load;
+        if (reps && !it.hold) it.reps = reps;
+      };
+      if (gf && gf.kind === 'db') {
+        it.fixedW = gf.w;
+        if (gf.k === 'light') {
+          set(`Haltères de ${kg(gf.w)} kg`, b.kind === 'force' ? '8-12' : '12-25');
+          if (!it.hold) it.gearNote = `Avec ${kg(gf.w)} kg, reste proche de l'échec : descente en 3 s et pause d'1 s en bas.`;
+        } else if (gf.k === 'heavy') {
+          set(`Haltères de ${kg(gf.w)} kg`, '6-10');
+          it.gearNote = `${kg(gf.w)} kg est lourd pour cet exercice : technique stricte avant tout.`;
+        } else set(`Haltères de ${kg(gf.w)} kg`);
+      } else if (gf && gf.kind === 'band') {
+        it.band = gf.w;
+        set(ex.id === 'pullup_band' ? `Élastique de ${kg(gf.w)} kg : le plus fort aide le plus, passe au plus léger quand tu fais 8 reps`
+          : `Élastique de ${kg(gf.w)} kg${gf.k === 'heavy' ? " : rapproche-toi du point d'ancrage pour réduire la tension" : ''}`);
+      } else if (ex.vest && has.has('gilet') && gear && gear.gilet) {
+        const v = Math.max(...gear.gilet);
+        it.vest = v;
+        if (b.kind === 'force') { it.vestOn = true; set(`Avec le gilet lesté (${kg(v)} kg)`); }
+        else if (it.hold) set(`Gilet de ${kg(v)} kg pour corser le maintien`);
+        else set(`Gilet de ${kg(v)} kg dès que tu dépasses ${repsTop(it.reps)} reps au poids du corps`);
+      } else if (ex.bw && ex.heavy && b.kind === 'force' && setupId !== 'salle') {
+        set('Sans lest : si tu dépasses 6 reps, descente en 4 s et pause d\'1 s en haut');
+      }
+    }));
+    return s;
+  }
+
   // ---------- Contexte de génération ----------
   function makeCtx(p) {
     const hist = A.store.data.history;
@@ -73,7 +133,7 @@
     const weekAgo = Date.now() - 7 * 864e5;
     const ctx = {
       lvl: LEVELS[p.level] || 2, eq: new Set(p.equipment || []), muscles: new Set(p.muscles || []), weak: p.weak || null,
-      duration: p.duration, rand: rng(p.seed), used: new Set(), cov: {}, recent, cardio: p.cardio || 'auto',
+      duration: p.duration, rand: rng(p.seed), used: new Set(), cov: {}, recent, cardio: p.cardio || 'auto', gear: p.gear || null,
       hardRecent: hist.filter(h => h.date > weekAgo && (h.cardio || []).some(c => c.hard)).length,
     };
     Object.keys(MUS).forEach(m => { ctx.cov[m] = 0; });
@@ -101,6 +161,9 @@
     if (ctx.recent.has(ex.id)) s -= 1.5;
     // Avec du matériel, on préfère les versions chargées aux versions au poids du corps
     if (ex.bw && !ex.heavy && ctx.eq.size >= 3) s -= 1.5;
+    // Haltères ou élastiques trop lourds pour l'exercice : on préfère autre chose
+    const gf = gearFit(ex, ctx.gear);
+    if (gf) s += gf.k === 'heavy' ? -5 : gf.k === 'light' ? -1 : 0;
     return s;
   }
   const needScore = (ex, ctx) => ex.m.reduce((s, m) => s + (ctx.muscles.has(m) && ctx.cov[m] < 3 ? 1.5 : 0), 0);
@@ -336,8 +399,9 @@
 
   // ---------- Génération complète ----------
   function generate(input) {
-    const p = Object.assign({ duration: 60, goal: 'hypertrophie', muscles: [], weak: null, equipment: A.ALL_EQ, level: 'inter', cardio: 'auto' }, input);
+    const p = Object.assign({ duration: 60, goal: 'hypertrophie', muscles: [], weak: null, equipment: A.ALL_EQ, level: 'inter', cardio: 'auto', setup: 'salle' }, input);
     p.seed = p.seed || Math.floor(Math.random() * 1e9);
+    if (p.gear === undefined) p.gear = A.gearFor(p.setup, p.equipment);
     p.muscles = p.muscles.slice();
     if (!p.muscles.length && p.goal !== 'endurance') p.muscles = D.PRESETS[0].m.slice();
     if (p.weak && !p.muscles.includes(p.weak)) p.muscles.unshift(p.weak);
@@ -380,26 +444,67 @@
       muscles: p.muscles, weak: p.weak, warmup: warmupFor(ctx.muscles, new Set(kinds), first), warmupSec,
       blocks, cooldown: COOLDOWN, cooldownSec: coolSec, notes,
       missing: noGear, skipped: uncovered.filter(m => !noGear.includes(m)),
+      setup: p.setup, eq: p.equipment.slice(), gear: p.gear,
     };
+    applyGear(session, p.setup, p.equipment, p.gear);
     session.estMin = Math.round(sessionSeconds(session) / 60);
     return session;
   }
 
-  // Exercices de remplacement pour le même muscle principal
-  function alternatives(item, session, eq) {
+  // Exercices de remplacement : mêmes muscles, même mouvement si possible, avec le matériel disponible
+  function alternatives(item, session, eq, gear) {
     const ex = A.exById(item.exId);
     if (!ex) return [];
+    const P = A.store.data.profile;
     const inSession = new Set(session.blocks.flatMap(b => b.items.map(i => i.exId)).filter(Boolean));
-    const eqSet = new Set(eq || A.store.data.profile.equipment);
-    const sim = e => e.pr + (e.t === ex.t ? 3 : 0) + (e.p && e.p === ex.p ? 2 : 0) + e.m.filter(m => ex.m.includes(m)).length;
+    const eqSet = new Set(eq || session.eq || P.equipment);
+    const g = gear !== undefined ? gear : (session.setup ? session.gear : A.gearFor(P.setup, [...eqSet]));
+    const sim = e => {
+      const gf = gearFit(e, g);
+      return e.pr + (e.t === ex.t ? 3 : 0) + (e.p && e.p === ex.p ? 4 : 0) + e.m.filter(m => ex.m.includes(m)).length * 2
+        + (e.m[0] === ex.m[0] ? 2 : 0) + (!!e.hold === !!ex.hold ? 1 : -2) + (gf ? (gf.k === 'heavy' ? -6 : gf.k === 'light' ? -1 : 0) : 0);
+    };
     return A.exList()
-      .filter(e => e.id !== ex.id && !inSession.has(e.id) && e.t !== 'mob' && e.m.includes(ex.m[0]) && e.eq.every(q => eqSet.has(q)))
+      .filter(e => e.id !== ex.id && !inSession.has(e.id) && e.t !== 'mob' && e.m.some(m => ex.m.includes(m)) && e.eq.every(q => eqSet.has(q)))
       .sort((a, b) => sim(b) - sim(a));
   }
+
+  // Adapte une séance existante (séance type, plan, favori…) au matériel que j'ai avec moi
+  function adapt(s, setupId, eq) {
+    const gear = A.gearFor(setupId, eq);
+    const eqSet = new Set(eq);
+    if (!s.orig) s.orig = ui.clone(s.blocks);
+    s.blocks = ui.clone(s.orig);
+    s.setup = setupId; s.eq = eq.slice(); s.gear = gear;
+    let swapped = 0, removed = 0;
+    s.blocks.forEach(b => {
+      b.items = b.items.filter(it => {
+        if (it.type === 'cardio') return true;
+        const ex = A.exById(it.exId);
+        if (!ex) return false;
+        if (ex.eq.every(e => eqSet.has(e))) return true;
+        const alt = alternatives(it, s, eq, gear)[0];
+        if (alt) { applySwap(it, alt.id); swapped++; return true; }
+        removed++;
+        return false;
+      });
+    });
+    s.blocks = s.blocks.filter(b => b.items.length);
+    applyGear(s, setupId, eq, gear);
+    const pl = n => (n > 1 ? 's' : '');
+    s.adaptNote = swapped || removed ? `Adaptée à ton matériel : ${swapped} exercice${pl(swapped)} remplacé${pl(swapped)}${removed ? `, ${removed} retiré${pl(removed)}` : ''}.` : null;
+    return refresh(s);
+  }
+  // Recalcule les charges après une modification (remplacement, ajout d'exercice)
+  const regear = s => applyGear(s, s.setup || A.store.data.profile.setup, s.eq || A.store.data.profile.equipment, s.setup ? s.gear : A.gearFor(A.store.data.profile.setup, A.store.data.profile.equipment));
+
   function applySwap(item, newId) {
     const ex = A.exById(newId);
+    if (item.gearLoad) { item.load = item.baseLoad; item.reps = item.baseReps ?? item.reps; }
+    ['fixedW', 'band', 'vest', 'vestOn', 'gearNote', 'gearLoad', 'baseLoad', 'baseReps'].forEach(k => delete item[k]);
     item.exId = newId;
     delete item.pct; delete item.setW; delete item.pctRange;
+    if (item.load && /1RM|Leste/.test(item.load)) delete item.load;
     if (ex.hold && !item.hold) { item.hold = 30; delete item.reps; }
     if (!ex.hold && item.hold) { delete item.hold; item.reps = '10-15'; }
     item.note = ex.str ? "Accent sur l'étirement : descente en 2-3 s, courte pause en bas." : null;
@@ -436,7 +541,7 @@
   }
 
   A.gen = {
-    GOALS, LEVELS, LEVEL_NAMES, MOD, C, COOLDOWN, generate, alternatives, applySwap, I, B, S, refresh, warmupFor,
+    GOALS, LEVELS, LEVEL_NAMES, MOD, C, COOLDOWN, generate, alternatives, applySwap, adapt, applyGear, regear, gearFit, I, B, S, refresh, warmupFor,
     itemSeconds, blockSeconds, sessionSeconds, cardioSeconds, repsAvg, repsTop, repsLow,
   };
 
@@ -474,6 +579,15 @@
     const ex = A.exById(it.exId);
     if (!ex) return null;
     if (it.setW && it.setW[setIdx] != null) return { w: it.setW[setIdx], why: 'Charge prévue par le plan' };
+    // Matériel à charge fixe : on progresse en reps puis en tempo, pas en kilos
+    if (it.fixedW || it.band) {
+      const last = prog.last(it.exId), top = repsTop(it.reps);
+      const reps = last ? last.sets.map(x => x.r).join(', ') : '';
+      const what = it.fixedW ? `haltères de ${ui.num(it.fixedW, 1)} kg` : `élastique de ${ui.num(it.band, 1)} kg`;
+      if (last && !ex.hold && last.sets.every(x => x.r >= top)) return { w: it.fixedW, why: `${top} reps atteintes partout la dernière fois : garde tes ${what} et ralentis la descente (3-4 s)` };
+      return { w: it.fixedW, why: `Tes ${what}${last ? ` · dernière fois ${reps}${ex.hold ? ' s' : ' reps'}` : ''} : vise +1 rep` };
+    }
+    if (it.vestOn) return { w: it.vest, why: `Gilet lesté de ${ui.num(it.vest, 1)} kg` };
     const orm = prog.orm(it.exId);
     if (it.pct && orm) return { w: A.round25(orm * it.pct), why: `${Math.round(it.pct * 100)} % de ton 1RM (${ui.num(orm, 1)} kg)` };
     if (it.pct && !orm) return { why: `${Math.round(it.pct * 100)} % de ton 1RM — renseigne ton 1RM pour le calcul automatique` };

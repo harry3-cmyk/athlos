@@ -40,13 +40,20 @@
       const n = circuit ? b.rounds : it.sets;
       entries.push({
         key, kind: 'ex', block: b.title, blockKind: b.kind, exId: it.exId, name: ex.n, item: it,
-        reps: it.reps, hold: it.hold || null, rir: it.rir, load: it.load, note: it.note, uni: !!ex.uni, bw: !!ex.bw,
+        reps: it.reps, hold: it.hold || null, rir: it.rir, load: it.load, note: [it.gearNote, it.note].filter(Boolean).join(' '), uni: !!ex.uni, bw: !!ex.bw,
         rest: circuit ? b.restEx : (it.rest || 0), group: circuit ? 'c' + bi : null, restRound: circuit ? b.restRound : 0,
         sets: Array.from({ length: n }, (_, i) => ({ w: null, r: null, done: false, tr: it.setReps ? it.setReps[i] : null })),
       });
     }));
     if (s.cooldown && s.cooldown.length) entries.push({ key: 'cool', kind: 'list', name: 'Retour au calme', list: s.cooldown, checked: [], done: false });
     return { id: ui.uid(), session: s, entries, startedAt: Date.now(), pausedAt: null, pausedTotal: 0, cur: { e: 0, s: 0 }, rest: null, timer: null };
+  }
+
+  // Applique le matériel de la séance (haltères fixes, élastiques, gilet) à un exercice ajouté ou remplacé
+  function gearItem(act, it, blockKind) {
+    const s = act.session;
+    G.applyGear({ blocks: [{ kind: blockKind || 'hyper', items: [it] }] }, s.setup, s.eq || D().profile.equipment, s.gear || null);
+    return it;
   }
 
   // Ordre des étapes (les circuits alternent les exercices tour par tour)
@@ -416,8 +423,8 @@
             A.cmp.exPicker({
               onPick: id => {
                 const ex = A.exById(id);
-                const it = ex.hold ? G.I(id, 3, 30, 60) : G.I(id, 3, '8-12', 90, { rir: '1-2' });
-                const entry = { key: 'x' + ui.uid(), kind: 'ex', block: 'Ajouté', blockKind: 'hyper', exId: id, name: ex.n, item: it, reps: it.reps, hold: it.hold || null, rir: it.rir, uni: !!ex.uni, bw: !!ex.bw, rest: it.rest, group: null, restRound: 0, sets: Array.from({ length: 3 }, () => ({ w: null, r: null, done: false })) };
+                const it = gearItem(act, ex.hold ? G.I(id, 3, 30, 60) : G.I(id, 3, '8-12', 90, { rir: '1-2' }));
+                const entry = { key: 'x' + ui.uid(), kind: 'ex', block: 'Ajouté', blockKind: 'hyper', exId: id, name: ex.n, item: it, reps: it.reps, hold: it.hold || null, rir: it.rir, load: it.load, note: it.gearNote, uni: !!ex.uni, bw: !!ex.bw, rest: it.rest, group: null, restRound: 0, sets: Array.from({ length: 3 }, () => ({ w: null, r: null, done: false })) };
                 const at = act.entries[act.cur.e] && act.entries[act.cur.e].group ? act.entries.findIndex((z, k) => k > act.cur.e && z.group !== act.entries[act.cur.e].group) : act.cur.e + 1;
                 const pos = at < 0 ? act.entries.length : at;
                 act.entries.splice(pos, 0, entry);
@@ -445,7 +452,9 @@
           const p = ev.target.closest('[data-id]'); if (!p) return;
           const ex = A.exById(p.dataset.id);
           G.applySwap(e.item, ex.id);
-          e.exId = ex.id; e.name = ex.n; e.uni = !!ex.uni; e.bw = !!ex.bw; e.hold = e.item.hold || null; e.reps = e.item.reps; e.note = e.item.note;
+          gearItem(act, e.item, e.blockKind);
+          e.exId = ex.id; e.name = ex.n; e.uni = !!ex.uni; e.bw = !!ex.bw; e.hold = e.item.hold || null; e.reps = e.item.reps;
+          e.load = e.item.load; e.note = [e.item.gearNote, e.item.note].filter(Boolean).join(' ');
           e.sets.forEach(s => { if (!s.done) { s.w = null; s.r = null; } });
           save(); c(); render();
         };
@@ -559,6 +568,7 @@
               id: ui.uid(), type: exercises.length && cardio.length ? 'mixte' : cardio.length ? 'cardio' : 'muscu', title: session.title,
               date: startedAt, durationSec: (Number(b.querySelector('[data-dur]').value) || Math.round(durationSec / 60)) * 60,
               goal: session.goal || null, source: session.source || null, planRef: session.planRef || null, muscles, exercises, cardio,
+              setup: session.setup ? A.setupName(session.setup) : null,
               distance: dist || null, volume: Math.round(volume), totalSets, totalReps, rpe, notes: b.querySelector('[data-notes]').value.trim(), prs, mode,
             };
             d.history.push(h);
