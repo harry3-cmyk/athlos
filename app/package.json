@@ -1,0 +1,25 @@
+{
+  "name": "forge",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Forge — suivi de performances physiques (musculation, corps, planification, analyse)",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w web",
+    "build": "npm run build -w server && npm run build -w web",
+    "start": "npm run start -w server",
+    "test": "npm run test -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "seed:demo": "npm run seed:demo -w server",
+    "e2e": "node e2e/smoke.mjs",
+    "build:pages": "npm run build:pages -w web",
+    "e2e:pages": "node e2e/local.mjs",
+    "publish:root": "node scripts/publish-root.mjs"
+  }
+}

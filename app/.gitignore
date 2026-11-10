@@ -1,0 +1,10 @@
+node_modules
+dist
+*.db
+*.db-wal
+*.db-shm
+data/
+.env
+e2e/shots/
+forge.zip
+dist-pages

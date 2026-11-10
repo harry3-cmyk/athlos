@@ -1,0 +1,13 @@
+services:
+  forge:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"   # exposé seulement en local : placer un reverse proxy HTTPS devant
+    environment:
+      ALLOW_REGISTRATION: "true"   # passer à "false" une fois ton compte créé
+    volumes:
+      - forge-data:/data
+
+volumes:
+  forge-data:
