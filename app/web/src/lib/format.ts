@@ -9,7 +9,7 @@ export const MUSCLES = Object.keys(MUSCLE_FR) as Muscle[];
 export const GROUP_FR: Record<Group, string> = { ...MUSCLE_FR, cardio: 'Cardio' };
 export const GOAL_FR: Record<Goal, string> = {
   strength: 'Force', hypertrophy: 'Hypertrophie', powerbuilding: 'Force + hypertrophie', athletic: 'Athlétique',
-  tactical: 'Opérateur', fat_loss: 'Perte de gras', general: 'Forme générale',
+  tactical: 'Opérateur', hybrid: 'Opérateur + masse', fat_loss: 'Perte de gras', general: 'Forme générale',
 };
 export const GOAL_DESC: Record<Goal, string> = {
   strength: 'Soulever le plus lourd possible sur les mouvements de base.',
@@ -17,6 +17,7 @@ export const GOAL_DESC: Record<Goal, string> = {
   powerbuilding: 'Être fort ET musclé : mouvements de base lourds, puis volume pour la masse.',
   athletic: 'Explosif, fort et endurant : sauts et lancers, force lourde, unilatéral, portés, conditionnement.',
   tactical: 'Préparation physique d’opérateur : force, endurance musculaire, course, intervalles et marche chargée.',
+  hybrid: 'Prendre de la masse et de la force tout en gardant l’endurance d’un opérateur : musculation lourde et volumineuse, course et intervalles à part.',
   fat_loss: 'Perdre du gras en conservant le muscle.',
   general: 'Rester en forme, avec un effort modéré et durable.',
 };

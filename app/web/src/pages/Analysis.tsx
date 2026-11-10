@@ -19,7 +19,7 @@ export default function AnalysisPage() {
       <Async state={state}>{a => {
         const issues = a.findings.filter(f => f.severity !== 'good');
         const strengths = a.findings.filter(f => f.severity === 'good');
-        const showCardio = a.cardio.minutesPerWeek > 0 || user.goal === 'tactical' || user.goal === 'athletic';
+        const showCardio = a.cardio.minutesPerWeek > 0 || ['tactical', 'athletic', 'hybrid'].includes(user.goal);
         return (
           <div className="stack">
             <div className={`grid ${showCardio ? 'cols-4' : 'cols-3'}`}>

@@ -9,7 +9,7 @@ import { CARDIO, MUSCLES, type Equipment, type ExerciseGroup, type Muscle, type 
  * Chaque règle chiffrée est rattachée à une source dans `PRINCIPLES`.
  */
 
-export const GOALS = ['strength', 'hypertrophy', 'powerbuilding', 'athletic', 'tactical', 'fat_loss', 'general'] as const;
+export const GOALS = ['strength', 'hypertrophy', 'powerbuilding', 'athletic', 'tactical', 'hybrid', 'fat_loss', 'general'] as const;
 export type Goal = (typeof GOALS)[number];
 export type Level = 'beginner' | 'intermediate' | 'advanced';
 export type EquipmentProfile = 'gym' | 'dumbbells' | 'bodyweight';
@@ -153,8 +153,18 @@ const TACTICAL_SPLITS: Record<number, Split> = {
   5: { label: '2 force + endurance + intervalles + marche chargée', days: [TAC_S1, COND_Z2, TAC_S2, TAC_INT, TAC_RUCK] },
   6: { label: '3 force + endurance + intervalles + marche chargée', days: [TAC_S1, COND_Z2, TAC_S2, TAC_INT, TAC_S3, TAC_RUCK] },
 };
+// — Opérateur + masse : séances de musculation « force + hypertrophie », endurance sur des jours séparés.
+const HYBRID_SPLITS: Record<number, Split> = {
+  2: { label: '2 séances corps entier avec conditionnement en fin de séance', days: [withFinisher(FULL_A), withFinisher(FULL_B)] },
+  3: { label: '3 séances corps entier, conditionnement intégré', days: [withFinisher(FULL_A), FULL_B, withFinisher(FULL_C)] },
+  4: { label: '3 musculation + 1 intervalles', days: [UPPER_A, LOWER_A, TAC_INT, FULL_C] },
+  5: { label: '3 musculation + endurance fondamentale + intervalles', days: [UPPER_A, LOWER_A, COND_Z2, FULL_C, TAC_INT] },
+  6: { label: '4 musculation + intervalles + marche chargée', days: [UPPER_A, LOWER_A, TAC_INT, UPPER_B, LOWER_B, TAC_RUCK] },
+};
 const splitFor = (goal: Goal, days: number): Split =>
-  (goal === 'athletic' ? ATHLETIC_SPLITS : goal === 'tactical' ? TACTICAL_SPLITS : SPLITS)[days];
+  (goal === 'athletic' ? ATHLETIC_SPLITS : goal === 'tactical' ? TACTICAL_SPLITS : goal === 'hybrid' ? HYBRID_SPLITS : SPLITS)[days];
+/** Objectifs qui visent la masse musculaire : volume équilibré jusqu'au repère de 10 séries. */
+const MASS_GOALS: Goal[] = ['hypertrophy', 'powerbuilding', 'hybrid'];
 
 // Sans le matériel voulu, on se rabat sur un schéma voisin plutôt que de vider la séance.
 const FALLBACK: Partial<Record<Pattern, Pattern>> = { ruck: 'zone2', power_upper: 'h_push', carry: 'core' };
@@ -186,6 +196,11 @@ const PRESCRIPTIONS: Record<Goal, Record<StrengthRole, Rx>> = {
     secondary: { sets: 3, repsMin: 6, repsMax: 10, rir: 2, restSec: 120 },
     accessory: { sets: 2, repsMin: 10, repsMax: 15, rir: 2, restSec: 60 },
   },
+  hybrid: {
+    main: { sets: 4, repsMin: 3, repsMax: 6, rir: 2, restSec: 180 },
+    secondary: { sets: 3, repsMin: 6, repsMax: 10, rir: 2, restSec: 120 },
+    accessory: { sets: 3, repsMin: 10, repsMax: 15, rir: 1, restSec: 75 },
+  },
   tactical: {
     main: { sets: 4, repsMin: 3, repsMax: 5, rir: 3, restSec: 180 },
     secondary: { sets: 3, repsMin: 6, repsMax: 10, rir: 2, restSec: 120 },
@@ -206,13 +221,13 @@ const ALLOWED: Record<EquipmentProfile, Equipment[]> = {
 
 export const GOAL_LABEL: Record<Goal, string> = {
   strength: 'Force', hypertrophy: 'Hypertrophie', powerbuilding: 'Force + hypertrophie', athletic: 'Athlétique',
-  tactical: 'Opérateur', fat_loss: 'Perte de gras', general: 'Forme générale',
+  tactical: 'Opérateur', hybrid: 'Opérateur + masse musculaire', fat_loss: 'Perte de gras', general: 'Forme générale',
 };
 
 /** Repère de volume hebdomadaire (séries/muscle) en dessous duquel on signale un déficit. */
 export function volumeFloor(goal: Goal, level?: Level): number {
   // Les débutants progressent avec nettement moins de volume : repère abaissé.
-  return (goal === 'hypertrophy' || goal === 'powerbuilding') && level !== 'beginner' ? 10 : 6;
+  return MASS_GOALS.includes(goal) && level !== 'beginner' ? 10 : 6;
 }
 
 const SEC_PER_SET = 45; // temps d'exécution moyen d'une série
@@ -329,7 +344,7 @@ export function generateProgram(cfg: GenConfig, catalog: CatalogExercise[]): Gen
   const volumeOf = () => weeklyVolume(planned.map(d => ({
     exercises: d.exercises.map(e => ({ muscle: e.muscle, secondary: byId.get(e.exerciseId)!.secondary, sets: e.sets })),
   })));
-  if ((cfg.goal === 'hypertrophy' || cfg.goal === 'powerbuilding') && cfg.level !== 'beginner') {
+  if (MASS_GOALS.includes(cfg.goal) && cfg.level !== 'beginner') {
     const stuck = new Set<Muscle>();
     for (let guard = 0; guard < 60; guard++) {
       const target = volumeOf()
@@ -353,12 +368,18 @@ export function generateProgram(cfg: GenConfig, catalog: CatalogExercise[]): Gen
     warnings.push('Certains mouvements n’ont pas d’équivalent avec ton matériel et ont été retirés (isolations surtout).');
   }
   const low = weeklySets.filter(w => w.sets < floor && !MINOR.includes(w.muscle));
-  if ((cfg.goal === 'hypertrophy' || cfg.goal === 'powerbuilding') && cfg.level !== 'beginner' && low.length) {
+  if (MASS_GOALS.includes(cfg.goal) && cfg.level !== 'beginner' && low.length) {
     warnings.push(
       `Volume sous le repère de ${floor} séries/semaine pour certains muscles : ajoute une séance, allonge la durée, ou marque-les comme prioritaires.`);
   }
   if (cfg.equipment === 'bodyweight' && cfg.goal === 'strength') {
     warnings.push('Au poids du corps, la force maximale progresse surtout par des variantes plus difficiles (levier, unilatéral) : la surcharge est limitée.');
+  }
+  if (cfg.goal === 'hybrid') {
+    warnings.push('Compromis assumé : tu progresseras un peu moins vite en masse qu’avec un programme d’hypertrophie pur, et moins vite en endurance qu’en Opérateur pur. En échange, aucun des deux ne reste en friche.');
+    warnings.push('La masse ne se construit pas en déficit : avec l’endurance en plus, mange assez pour que ton poids monte lentement (repère pratique : jusqu’à 0,5 % par semaine).');
+    if (days < 5) warnings.push('À moins de 5 séances, l’endurance est limitée à un minimum d’entretien.');
+    if (days === 6 && !missing.has('ruck')) warnings.push('Marche chargée : commence léger (environ 10 % de ton poids de corps) et n’augmente qu’un paramètre à la fois, la charge ou la distance (repère de prudence).');
   }
   if (cfg.goal === 'tactical') {
     if (days < 4) warnings.push('Pour ce profil, 4 séances ou plus sont nécessaires pour développer à la fois la force et l’endurance : ici l’endurance est réduite au minimum.');
@@ -398,6 +419,7 @@ function summary(cfg: GenConfig, days: number): string {
     powerbuilding: 'Les mouvements de base travaillés lourd (3–6 reps) pour la force, puis du volume proche de l’échec (6–15 reps) pour la masse musculaire.',
     athletic: 'Chaque séance commence par un travail explosif à l’état frais, suivi de force lourde, d’unilatéral et de portés ; le conditionnement est placé à part.',
     tactical: 'Force sous-maximale sur les mouvements de base, endurance musculaire au poids du corps, base aérobie, intervalles et marche chargée : être fort ET endurant, sans point faible.',
+    hybrid: 'Musculation « force + hypertrophie » pour construire la masse, endurance et intervalles sur des jours séparés pour garder le moteur : un gabarit musclé qui tient la distance.',
     general: 'Tous les schémas moteurs chaque semaine, effort modéré, volume raisonnable pour tenir dans la durée.',
   };
   return `${days} séances par semaine. ${base[cfg.goal]}`;
@@ -469,6 +491,11 @@ const P = {
     text: 'Les programmes qui combinent musculation, endurance et marche chargée progressive améliorent nettement plus la performance en portage que la musculation ou l’endurance seules.',
     source: 'Knapik, Harman, Steelman & Graham, J Strength Cond Res, 2012 (revue systématique, 10 études)',
   },
+  compat: {
+    title: 'Masse et endurance sont compatibles',
+    text: 'Ajouter de l’endurance à la musculation ne réduit ni l’hypertrophie ni la force maximale mesurées sur le muscle entier ; seule la force explosive en pâtit, surtout quand les deux sont faits dans la même séance. Nuance : au niveau des fibres, la course (pas le vélo) freine légèrement l’hypertrophie.',
+    source: 'Schumann et al., Sports Med, 2022 (méta-analyse, 43 études) ; Lundberg et al., Sports Med, 2022',
+  },
   operator: {
     title: 'Force sous-maximale + conditionnement',
     text: 'Peu de mouvements de base, charges à 70–90 % du maximum sans aller à l’échec, pour rester frais pour l’endurance et le terrain.',
@@ -482,6 +509,7 @@ function principlesFor(cfg: GenConfig): Principle[] {
     case 'hypertrophy': return [P.volume, P.frequency, P.failure, P.load, P.landmarks, P.progression];
     case 'powerbuilding': return [P.load, P.volume, P.frequency, P.failure, P.rest, P.progression];
     case 'athletic': return [P.power, P.load, P.concurrent, P.hiit, P.polarized, P.progression];
+    case 'hybrid': return [P.compat, P.concurrent, P.volume, P.load, P.hiit, P.ruck, P.progression];
     case 'tactical': return [P.ruck, P.concurrent, P.operator, P.hiit, P.polarized, P.progression];
     case 'fat_loss': return [P.cut, P.failure, P.frequency, P.progression];
     default: return [P.frequency, P.failure, P.progression, P.rest];

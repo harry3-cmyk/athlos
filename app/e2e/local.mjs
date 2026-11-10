@@ -147,6 +147,14 @@ try {
   await page.getByText('min/sem').waitFor();
   ok('objectif Opérateur : programme force + endurance, séance de course saisie en km et minutes, allure calculée');
 
+  await page.goto(base + '#/programmes');
+  await page.getByRole('button', { name: 'Opérateur + masse', exact: true }).click();
+  await page.getByRole('button', { name: 'Générer l’aperçu' }).click();
+  await page.getByText('Masse et endurance sont compatibles').waitFor();
+  await page.getByText('Compromis assumé').waitFor();
+  await noOverflow('aperçu opérateur + masse');
+  ok('objectif Opérateur + masse : aperçu généré avec avertissements et sources');
+
   // Données d'exemple : toutes les pages
   await page.goto(base + '#/reglages');
   await page.getByRole('button', { name: 'Effacer toutes mes données' }).click();

@@ -137,7 +137,7 @@ describe('analyse', () => {
 
 describe('objectifs mixtes', () => {
   const byId = new Map(catalog.map(e => [e.id, e]));
-  const goals = ['powerbuilding', 'athletic', 'tactical'] as const;
+  const goals = ['powerbuilding', 'athletic', 'tactical', 'hybrid'] as const;
   const equipments = ['gym', 'dumbbells', 'bodyweight'] as const;
 
   it('génère un programme cohérent pour chaque objectif, matériel et fréquence', () => {
@@ -185,6 +185,18 @@ describe('objectifs mixtes', () => {
     expect(bw.days[4].name).toBe('Sortie longue');
     expect(bw.days[4].exercises).toHaveLength(1);
     expect(generateProgram(cfg({ goal: 'tactical', days: 3 }), catalog).rationale.warnings.join(' ')).toMatch(/4 séances ou plus/);
+  });
+
+  it('opérateur + masse : volume de musculation au repère ET endurance chaque semaine', () => {
+    const p = generateProgram(cfg({ goal: 'hybrid', days: 5, minutes: 75 }), catalog);
+    for (const w of p.weeklySets.filter(w => !['abs', 'calves'].includes(w.muscle))) expect(w.sets, w.muscle).toBeGreaterThanOrEqual(10);
+    const cardio = p.days.flatMap(d => d.exercises).filter(e => e.muscle === 'cardio');
+    expect(cardio.map(e => byId.get(e.exerciseId)!.pattern).sort()).toEqual(['intervals', 'zone2']);
+    expect(cardio.reduce((s, e) => s + e.sets * e.repsMax, 0)).toBeGreaterThanOrEqual(60);
+    // musculation et endurance sur des jours distincts
+    for (const d of p.days) expect(new Set(d.exercises.map(e => e.muscle === 'cardio')).size === 1 || d.exercises[0].muscle === 'cardio', d.name).toBe(true);
+    expect(p.days[0].exercises[0]).toMatchObject({ role: 'main', repsMin: 3, repsMax: 6 });
+    expect(p.rationale.warnings.join(' ')).toMatch(/Compromis/);
   });
 
   it('analyse : signale le manque d’endurance pour un profil opérateur', () => {

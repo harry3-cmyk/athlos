@@ -47,6 +47,7 @@ const T = {
   regressPctPerWeek: -0.5,
   highVolume: 25,
   cardioTactical: 90,      // minutes d'endurance par semaine visées pour le profil opérateur
+  cardioHybrid: 60,        // idem pour le profil opérateur + masse
   cardioAthletic: 30,      // idem pour le profil athlétique          // séries/sem au-delà desquelles on alerte sur la récupération
   pullPushMin: 0.8,        // tirage / poussée
   postQuadMin: 0.6,        // chaîne postérieure / quadriceps
@@ -249,13 +250,13 @@ export function analyze(input: AnalysisInput): AnalysisResult {
     sessionsPerWeek: round1(new Set(cardio28.map(c => c.workoutId)).size / weeks),
     kmPerWeek: round1(cardio28.reduce((s, c) => s + c.km, 0) / weeks),
   };
-  const cardioFloor = goal === 'tactical' ? T.cardioTactical : goal === 'athletic' ? T.cardioAthletic : 0;
+  const cardioFloor = goal === 'tactical' ? T.cardioTactical : goal === 'hybrid' ? T.cardioHybrid : goal === 'athletic' ? T.cardioAthletic : 0;
   if (enough && cardioFloor && cardio.minutesPerWeek < cardioFloor) {
     findings.push({
       id: 'cardio', severity: goal === 'tactical' ? (cardio.minutesPerWeek < cardioFloor / 2 ? 'high' : 'medium') : 'low', category: 'Endurance',
       title: 'Endurance insuffisante pour ton objectif',
       detail: `${cardio.minutesPerWeek} min/semaine d’endurance en moyenne, pour un repère de ${cardioFloor} min.`,
-      action: goal === 'tactical'
+      action: goal === 'tactical' || goal === 'hybrid'
         ? 'Ajoute une séance d’endurance fondamentale (30 à 60 min en aisance respiratoire) et garde une séance d’intervalles par semaine.'
         : 'Ajoute un bloc d’intervalles courts en fin de séance ou une séance de conditionnement dédiée.',
     });
@@ -301,7 +302,7 @@ export function analyze(input: AnalysisInput): AnalysisResult {
         action: 'Réduis les apports d’environ 10 % ou ajoute de l’activité quotidienne, puis réévalue dans 2 semaines.' });
       else findings.push({ id: 'weight', severity: 'good', category: 'Poids',
         title: 'Rythme de perte adapté', detail: `${fr(p)} %/semaine, dans la zone −0,5 à −1 %.`, action: 'Continue ainsi.' });
-    } else if (goal === 'hypertrophy' || goal === 'powerbuilding') {
+    } else if (goal === 'hypertrophy' || goal === 'powerbuilding' || goal === 'hybrid') {
       if (p > 0.5) findings.push({ id: 'weight', severity: 'low', category: 'Poids',
         title: 'Prise de poids rapide', detail: `+${fr(p)} %/semaine. Au-delà de 0,5 %/semaine, une part croissante est du gras (repère pratique).`,
         action: 'Réduis légèrement le surplus calorique.' });

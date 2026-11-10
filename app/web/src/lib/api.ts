@@ -32,7 +32,7 @@ export async function api<T = any>(method: string, url: string, body?: unknown):
   return data as T;
 }
 
-export type Goal = 'strength' | 'hypertrophy' | 'powerbuilding' | 'athletic' | 'tactical' | 'fat_loss' | 'general';
+export type Goal = 'strength' | 'hypertrophy' | 'powerbuilding' | 'athletic' | 'tactical' | 'hybrid' | 'fat_loss' | 'general';
 /** Groupe d'un exercice : un muscle, ou « cardio » (distance en km dans weight, durée en minutes dans reps). */
 export type Group = Muscle | 'cardio';
 export type Muscle = 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'abs';

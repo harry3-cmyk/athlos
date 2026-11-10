@@ -55,7 +55,7 @@ export function ProgramView({ program, dayAction, exerciseAction }: {
       <div className="grid cols-2">
         <div className="card">
           <div className="card-head"><h2>Séries hebdomadaires par muscle</h2><span className="small muted">trait = repère</span></div>
-          <MuscleBars rows={program.weeklySets.map(w => ({ ...w, floor: (program.goal === 'hypertrophy' || program.goal === 'powerbuilding') && program.config.level !== 'beginner' ? 10 : 6 }))} />
+          <MuscleBars rows={program.weeklySets.map(w => ({ ...w, floor: ['hypertrophy', 'powerbuilding', 'hybrid'].includes(program.goal) && program.config.level !== 'beginner' ? 10 : 6 }))} />
           <p className="source">Muscle principal = 1 série, muscle secondaire = 0,5 série ; l’endurance n’est pas comptée ici. RIR = répétitions en réserve avant l’échec.</p>
         </div>
         <div className="card">
