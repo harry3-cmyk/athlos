@@ -134,3 +134,72 @@ describe('analyse', () => {
     expect(r.findings.find(f => f.id === 'weight')?.title).toMatch(/trop rapide/);
   });
 });
+
+describe('objectifs mixtes', () => {
+  const byId = new Map(catalog.map(e => [e.id, e]));
+  const goals = ['powerbuilding', 'athletic', 'tactical'] as const;
+  const equipments = ['gym', 'dumbbells', 'bodyweight'] as const;
+
+  it('génère un programme cohérent pour chaque objectif, matériel et fréquence', () => {
+    for (const goal of goals) for (const equipment of equipments) for (const days of [2, 3, 4, 5, 6]) {
+      const p = generateProgram(cfg({ goal, equipment, days, minutes: 60 }), catalog);
+      const tag = `${goal}/${equipment}/${days}`;
+      expect(p.days, tag).toHaveLength(days);
+      for (const d of p.days) {
+        expect(d.exercises.length, `${tag} ${d.name}`).toBeGreaterThanOrEqual(1);
+        expect(new Set(d.exercises.map(e => e.exerciseId)).size, tag).toBe(d.exercises.length);
+        expect(d.estMinutes, `${tag} ${d.name}`).toBeLessThanOrEqual(70);
+        for (const e of d.exercises) expect(e.repsMin, tag).toBeLessThanOrEqual(e.repsMax);
+      }
+      expect(p.rationale.principles.length, tag).toBeGreaterThan(3);
+    }
+  });
+
+  it('force + hypertrophie : lourd sur les mouvements de base, volume au repère', () => {
+    const p = generateProgram(cfg({ goal: 'powerbuilding' }), catalog);
+    expect(p.days[0].exercises[0]).toMatchObject({ role: 'main', repsMin: 3, repsMax: 6 });
+    expect(p.days[0].exercises.some(e => e.role === 'accessory' && e.repsMax === 15)).toBe(true);
+    for (const w of p.weeklySets.filter(w => !['abs', 'calves'].includes(w.muscle))) expect(w.sets, w.muscle).toBeGreaterThanOrEqual(10);
+  });
+
+  it('athlétique : chaque séance de force commence par de l’explosif, conditionnement présent', () => {
+    const p = generateProgram(cfg({ goal: 'athletic', days: 4, minutes: 60 }), catalog);
+    const strength = p.days.filter(d => d.exercises[0].role !== 'cardio');
+    expect(strength).toHaveLength(3);
+    for (const d of strength) expect(d.exercises[0].role, d.name).toBe('power');
+    expect(p.days.some(d => d.exercises.some(e => e.muscle === 'cardio'))).toBe(true);
+    expect(p.weeklySets.find(w => w.muscle === 'quads')!.sets).toBeGreaterThan(0);
+    expect(generateProgram(cfg({ goal: 'athletic', days: 2, minutes: 45 }), catalog).weeklySets.find(w => w.muscle === 'quads')!.sets).toBeGreaterThan(0);
+  });
+
+  it('opérateur : force, endurance fondamentale, intervalles et marche chargée', () => {
+    const p = generateProgram(cfg({ goal: 'tactical', days: 5, minutes: 60 }), catalog);
+    const patterns = p.days.flatMap(d => d.exercises.map(e => byId.get(e.exerciseId)!.pattern));
+    for (const need of ['squat', 'hinge', 'v_pull', 'zone2', 'intervals', 'ruck', 'carry', 'endurance_push']) expect(patterns, need).toContain(need);
+    const cardioMinutes = p.days.flatMap(d => d.exercises).filter(e => e.muscle === 'cardio').reduce((s, e) => s + e.sets * e.repsMax, 0);
+    expect(cardioMinutes).toBeGreaterThanOrEqual(90);
+    // le cardio ne pollue pas le volume musculaire
+    expect(p.weeklySets.every(w => Number.isFinite(w.sets))).toBe(true);
+    // sans sac lesté : sortie longue à la place, sans séance vide
+    const bw = generateProgram(cfg({ goal: 'tactical', days: 5, equipment: 'bodyweight' }), catalog);
+    expect(bw.days[4].name).toBe('Sortie longue');
+    expect(bw.days[4].exercises).toHaveLength(1);
+    expect(generateProgram(cfg({ goal: 'tactical', days: 3 }), catalog).rationale.warnings.join(' ')).toMatch(/4 séances ou plus/);
+  });
+
+  it('analyse : signale le manque d’endurance pour un profil opérateur', () => {
+    const today = '2026-11-10';
+    const e = catalog.find(c => (c as any).slug === 'back-squat')!;
+    const sets = Array.from({ length: 8 }, (_, i) => ({
+      date: addDays(today, -i * 3), workoutId: i + 1, exerciseId: e.id, slug: 'back-squat', name: e.name, muscle: 'quads' as const,
+      secondary: [], pattern: e.pattern, compound: true, weight: 100, reps: 5,
+    }));
+    const low = analyze({ today, goal: 'tactical', sets, cardio: [{ date: today, workoutId: 50, minutes: 40, km: 7 }], missedPlanned: 0, weights: [] });
+    expect(low.cardio).toMatchObject({ minutesPerWeek: 10, kmPerWeek: 1.8 });
+    expect(low.findings.find(f => f.id === 'cardio')?.severity).toBe('high');
+    const ok = analyze({ today, goal: 'tactical', sets, missedPlanned: 0, weights: [],
+      cardio: Array.from({ length: 8 }, (_, i) => ({ date: addDays(today, -i * 3), workoutId: 60 + i, minutes: 50, km: 8 })) });
+    expect(ok.findings.find(f => f.id === 'cardio')).toBeUndefined();
+    expect(analyze({ today, goal: 'hypertrophy', sets, missedPlanned: 0, weights: [] }).findings.find(f => f.id === 'cardio')).toBeUndefined();
+  });
+});

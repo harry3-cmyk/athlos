@@ -4,25 +4,32 @@ export const MUSCLES = [
 ] as const;
 export type Muscle = (typeof MUSCLES)[number];
 
-export type Equipment = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight';
+/** Catégorie des exercices d'endurance : exclue des calculs de volume, de 1RM et de records. */
+export const CARDIO = 'cardio' as const;
+export type ExerciseGroup = Muscle | typeof CARDIO;
+
+// other = petit matériel : médecine-ball, kettlebell, sac lesté.
+export type Equipment = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'other';
 
 export type Pattern =
   | 'squat' | 'hinge' | 'lunge' | 'hip_thrust'
   | 'h_push' | 'incline_push' | 'v_push' | 'h_pull' | 'v_pull'
   | 'knee_ext' | 'knee_flex' | 'calf' | 'curl' | 'tri_ext'
-  | 'lateral_raise' | 'rear_delt' | 'chest_fly' | 'core';
+  | 'lateral_raise' | 'rear_delt' | 'chest_fly' | 'core'
+  | 'power_lower' | 'power_upper' | 'carry' | 'endurance_push'
+  | 'zone2' | 'intervals' | 'short_intervals' | 'ruck';
 
 export interface ExerciseSeed {
   slug: string;
   name: string;
-  muscle: Muscle;
+  muscle: ExerciseGroup;
   secondary: Muscle[];
   equipment: Equipment;
   pattern: Pattern;
   compound: boolean;
 }
 
-type Row = [string, string, Muscle, Muscle[], Equipment, Pattern, boolean];
+type Row = [string, string, ExerciseGroup, Muscle[], Equipment, Pattern, boolean];
 
 // L'ordre dans chaque schéma moteur = ordre de préférence du générateur (du plus "de base" au plus spécifique).
 const ROWS: Row[] = [
@@ -113,7 +120,34 @@ const ROWS: Row[] = [
   ['hanging-leg-raise', 'Relevé de jambes suspendu', 'abs', [], 'bodyweight', 'core', false],
   ['ab-wheel', 'Roulette abdominale', 'abs', [], 'bodyweight', 'core', false],
   ['plank', 'Gainage planche', 'abs', [], 'bodyweight', 'core', false],
+  // — Puissance (exécution explosive, loin de l'échec)
+  ['box-jump', 'Saut sur box', 'quads', ['glutes', 'calves'], 'bodyweight', 'power_lower', true],
+  ['kb-swing', 'Kettlebell swing', 'glutes', ['hamstrings', 'back'], 'other', 'power_lower', true],
+  ['power-clean', 'Épaulé (power clean)', 'glutes', ['quads', 'back'], 'barbell', 'power_lower', true],
+  ['broad-jump', 'Saut en longueur sans élan', 'quads', ['glutes'], 'bodyweight', 'power_lower', true],
+  ['jump-squat', 'Squat sauté', 'quads', ['glutes', 'calves'], 'bodyweight', 'power_lower', true],
+  ['med-ball-slam', 'Médecine-ball : frappe au sol', 'abs', ['shoulders', 'back'], 'other', 'power_upper', true],
+  ['plyo-push-up', 'Pompes explosives', 'chest', ['triceps', 'shoulders'], 'bodyweight', 'power_upper', true],
+  ['push-press', 'Développé poussé (push press)', 'shoulders', ['triceps', 'quads'], 'barbell', 'power_upper', true],
+  ['med-ball-chest-pass', 'Médecine-ball : passe poitrine explosive', 'chest', ['triceps'], 'other', 'power_upper', true],
+  // — Portés (les répétitions comptent des mètres)
+  ['farmer-walk', 'Marche du fermier (reps = mètres)', 'back', ['abs'], 'dumbbell', 'carry', true],
+  ['suitcase-carry', 'Porté unilatéral (reps = mètres)', 'abs', ['back'], 'dumbbell', 'carry', true],
+  ['bear-crawl', 'Marche de l’ours (reps = mètres)', 'abs', ['shoulders'], 'bodyweight', 'carry', true],
+  // — Endurance musculaire au poids du corps
+  ['push-up-endurance', 'Pompes — endurance (séries longues)', 'chest', ['triceps', 'shoulders'], 'bodyweight', 'endurance_push', true],
+  // — Endurance (la charge note la distance en km, les répétitions la durée en minutes)
+  ['run-easy', 'Course — endurance fondamentale', 'cardio', [], 'bodyweight', 'zone2', false],
+  ['bike-easy', 'Vélo — endurance fondamentale', 'cardio', [], 'machine', 'zone2', false],
+  ['row-easy', 'Rameur — endurance fondamentale', 'cardio', [], 'machine', 'zone2', false],
+  ['run-intervals', 'Course — intervalles longs (4 min)', 'cardio', [], 'bodyweight', 'intervals', false],
+  ['bike-intervals', 'Vélo — intervalles longs (4 min)', 'cardio', [], 'machine', 'intervals', false],
+  ['row-intervals', 'Rameur — intervalles longs (4 min)', 'cardio', [], 'machine', 'intervals', false],
+  ['run-short', 'Course — intervalles courts (1 min)', 'cardio', [], 'bodyweight', 'short_intervals', false],
+  ['bike-short', 'Vélo — intervalles courts (1 min)', 'cardio', [], 'machine', 'short_intervals', false],
+  ['ruck-march', 'Marche chargée (sac à dos)', 'cardio', [], 'other', 'ruck', false],
 ];
+
 
 export const EXERCISE_SEED: ExerciseSeed[] = ROWS.map(
   ([slug, name, muscle, secondary, equipment, pattern, compound]) => ({

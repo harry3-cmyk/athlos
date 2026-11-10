@@ -19,9 +19,17 @@ export default function AnalysisPage() {
       <Async state={state}>{a => {
         const issues = a.findings.filter(f => f.severity !== 'good');
         const strengths = a.findings.filter(f => f.severity === 'good');
+        const showCardio = a.cardio.minutesPerWeek > 0 || user.goal === 'tactical' || user.goal === 'athletic';
         return (
           <div className="stack">
-            <div className="grid cols-3">
+            <div className={`grid ${showCardio ? 'cols-4' : 'cols-3'}`}>
+              {showCardio && (
+                <div className="card stat">
+                  <div className="label">Endurance</div>
+                  <div className="value">{a.cardio.minutesPerWeek} <small>min/sem</small></div>
+                  <div className="hint">{fmtNum(a.cardio.sessionsPerWeek)} séance(s) · {fmtNum(a.cardio.kmPerWeek)} km par semaine</div>
+                </div>
+              )}
               <div className="card stat">
                 <div className="label">Séances par semaine</div>
                 <div className="value">{fmtNum(a.consistency.perWeek)}</div>

@@ -114,7 +114,41 @@ try {
   fs.rmSync(exportPath);
   ok('export, effacement complet, puis restauration par import');
 
+  // Objectif « Opérateur » : programme mixte force + endurance, saisie d'une séance d'endurance
+  await page.goto(base + '#/programmes');
+  await page.getByRole('button', { name: 'Opérateur', exact: true }).click();
+  await page.getByText('Préparation physique d’opérateur').waitFor();
+  await page.getByRole('group', { name: 'Séances par semaine' }).getByRole('button', { name: '5' }).click();
+  await page.getByRole('button', { name: 'Générer l’aperçu' }).click();
+  await page.getByRole('heading', { name: 'Marche chargée' }).waitFor();
+  await page.getByText('Le portage de charge s’entraîne en portant').waitFor();
+  await noOverflow('aperçu opérateur'); await shot('operateur-apercu');
+  await page.getByRole('button', { name: 'Enregistrer ce programme' }).first().click();
+  await page.getByRole('heading', { name: 'Planifier sur le calendrier' }).waitFor();
+  await page.locator('.card:has(h2:text-is("Endurance fondamentale"))').getByRole('button', { name: 'Démarrer' }).click();
+  await page.locator('.ex-card').first().waitFor();
+  const cardio = page.locator('.ex-card').first();
+  await cardio.getByText('Distance (km)').waitFor();
+  await cardio.locator('tbody tr input').nth(0).fill('7,5');
+  if (await cardio.locator('tbody tr input').nth(1).inputValue() !== '35') errors.push('durée cible non pré-remplie');
+  await cardio.locator('button.check').click();
+  if (await page.locator('.rest-bar').count()) errors.push('minuteur de repos affiché après un effort continu');
+  await shot('operateur-seance');
+  await page.getByRole('button', { name: 'Terminer' }).click();
+  await page.getByRole('dialog', { name: 'Séance terminée' }).waitFor();
+  await page.getByRole('button', { name: 'Voir la séance' }).click();
+  await page.getByRole('link', { name: 'Course — endurance fondamentale' }).click();
+  await page.getByText('Durée par séance').waitFor();
+  await page.getByRole('cell', { name: '4:40 /km' }).waitFor();
+  await page.goto(base + '#/reglages');
+  await page.getByRole('button', { name: 'Opérateur', exact: true }).click();
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await page.goto(base + '#/analyse');
+  await page.getByText('min/sem').waitFor();
+  ok('objectif Opérateur : programme force + endurance, séance de course saisie en km et minutes, allure calculée');
+
   // Données d'exemple : toutes les pages
+  await page.goto(base + '#/reglages');
   await page.getByRole('button', { name: 'Effacer toutes mes données' }).click();
   await page.getByText('Bienvenue sur Forge').waitFor();
   await page.getByRole('button', { name: 'Voir avec des données d’exemple' }).click();

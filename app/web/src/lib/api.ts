@@ -32,15 +32,17 @@ export async function api<T = any>(method: string, url: string, body?: unknown):
   return data as T;
 }
 
-export type Goal = 'strength' | 'hypertrophy' | 'fat_loss' | 'general';
+export type Goal = 'strength' | 'hypertrophy' | 'powerbuilding' | 'athletic' | 'tactical' | 'fat_loss' | 'general';
+/** Groupe d'un exercice : un muscle, ou « cardio » (distance en km dans weight, durée en minutes dans reps). */
+export type Group = Muscle | 'cardio';
 export type Muscle = 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'abs';
 export type Status = 'planned' | 'in_progress' | 'done';
 
 export interface User { id: number; email: string; name: string; sex: 'male' | 'female' | null; heightCm: number | null; birthYear: number | null; goal: Goal }
-export interface Exercise { id: number; name: string; muscle: Muscle; equipment: string; pattern: string; compound: boolean; custom: boolean }
+export interface Exercise { id: number; name: string; muscle: Group; equipment: string; pattern: string; compound: boolean; custom: boolean }
 export interface SetRow { weight: number; reps: number; rpe: number | null; warmup: boolean; done: boolean }
 export interface WorkoutExercise {
-  exerciseId: number; name: string; muscle: Muscle; equipment: string;
+  exerciseId: number; name: string; muscle: Group; equipment: string;
   targetSets: number | null; repsMin: number | null; repsMax: number | null; rir: number | null; restSec: number | null;
   notes: string; sets: SetRow[];
   previous: { date: string; sets: { weight: number; reps: number; rpe: number | null }[] } | null;
@@ -57,7 +59,7 @@ export interface WorkoutSummary {
 export interface PrEvent { date: string; workoutId: number; exerciseId: number; name: string; type: 'e1rm' | 'weight' | 'reps'; value: number; previous: number; weight: number; reps: number }
 
 export interface GenConfig { goal: Goal; days: number; level: 'beginner' | 'intermediate' | 'advanced'; equipment: 'gym' | 'dumbbells' | 'bodyweight'; minutes: number; priorities: Muscle[] }
-export interface ProgramExercise { id?: number; exerciseId: number; name: string; muscle: Muscle; pattern?: string; role: string; sets: number; repsMin: number; repsMax: number; rir: number; restSec: number }
+export interface ProgramExercise { id?: number; exerciseId: number; name: string; muscle: Group; pattern?: string; role: string; sets: number; repsMin: number; repsMax: number; rir: number; restSec: number }
 export interface ProgramDay { id?: number; name: string; focus: string; estMinutes: number; exercises: ProgramExercise[] }
 export interface Program {
   id?: number; name: string; goal: Goal; config: GenConfig; days: ProgramDay[];
@@ -80,6 +82,7 @@ export interface Analysis {
   ratios: { label: string; value: number; low: number; high: number; a: number; b: number }[];
   trends: { exerciseId: number; name: string; sessions: number; pctPerWeek: number; best: number }[];
   consistency: { perWeek: number; adherence: number | null };
+  cardio: { minutesPerWeek: number; sessionsPerWeek: number; kmPerWeek: number };
   weightTrend: { pctPerWeek: number; kgPerWeek: number } | null;
   findings: Finding[];
 }
@@ -97,7 +100,9 @@ export interface Dashboard {
   findings: Finding[];
   weightSeries: { date: string; weight: number; trend: number | null }[];
 }
+export interface CardioHistory { cardio: true; sessions: { workoutId: number; date: string; km: number; minutes: number }[] }
 export interface ExerciseHistory {
+  cardio?: false;
   sessions: { workoutId: number; date: string; e1rm: number; topWeight: number; topReps: number; volume: number; sets: { weight: number; reps: number; rpe: number | null }[] }[];
   records: { e1rm: { value: number; date: string }; weight: { value: number; reps: number; date: string }; volume: { value: number; date: string } } | null;
 }

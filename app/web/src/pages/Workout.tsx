@@ -2,15 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ExercisePicker, Icon, Modal } from '../components/ui';
 import { api, type Exercise, type PrEvent, type SetRow, type Workout, type WorkoutExercise } from '../lib/api';
-import { fmtClock, fmtFull, fmtRest, fmtSet, fmtShort, fmtVolume, todayStr } from '../lib/format';
+import { fmtCardio, fmtClock, fmtFull, fmtRest, fmtSet, fmtShort, fmtVolume, todayStr } from '../lib/format';
 import { prLabel } from './Dashboard';
 
 const DEFAULT_REST = 120;
 
 function target(e: WorkoutExercise): string {
   const parts: string[] = [];
-  if (e.targetSets && e.repsMin && e.repsMax) parts.push(`${e.targetSets} × ${e.repsMin === e.repsMax ? e.repsMin : `${e.repsMin}–${e.repsMax}`}`);
-  if (e.rir != null) parts.push(`${e.rir} rep${e.rir > 1 ? 's' : ''} en réserve`);
+  const cardio = e.muscle === 'cardio';
+  if (e.targetSets && e.repsMin && e.repsMax) parts.push(`${e.targetSets} × ${e.repsMin === e.repsMax ? e.repsMin : `${e.repsMin}–${e.repsMax}`}${cardio ? ' min' : ''}`);
+  if (e.rir != null && !cardio) parts.push(`${e.rir} rep${e.rir > 1 ? 's' : ''} en réserve`);
   if (e.restSec) parts.push(`repos ${fmtRest(e.restSec)}`);
   return parts.join(' · ');
 }
@@ -115,10 +116,14 @@ export default function WorkoutPage() {
 
   const toggleDone = (i: number, k: number) => {
     const e = w.exercises[i], s = e.sets[k];
-    if (!s.done && s.reps <= 0) { setError('Indique le nombre de répétitions avant de valider la série.'); return; }
+    if (!s.done && s.reps <= 0) { setError(e.muscle === 'cardio' ? 'Indique la durée en minutes avant de valider.' : 'Indique le nombre de répétitions avant de valider la série.'); return; }
     setError(null);
     setSet(i, k, { done: !s.done });
-    if (!s.done) { const total = e.restSec ?? DEFAULT_REST; setRest({ until: Date.now() + total * 1000, total }); setNow(Date.now()); }
+    if (!s.done) {
+      const total = e.restSec ?? DEFAULT_REST;
+      // Pas de minuteur pour un effort continu (repos prescrit à 0).
+      if (total > 0) { setRest({ until: Date.now() + total * 1000, total }); setNow(Date.now()); }
+    }
   };
   const addSet = (i: number) => setEx(i, e => {
     const lastSet = e.sets[e.sets.length - 1];
@@ -169,7 +174,7 @@ export default function WorkoutPage() {
   };
 
   const doneSets = w.exercises.flatMap(e => e.sets.filter(s => s.done && !s.warmup));
-  const volume = doneSets.reduce((s, x) => s + x.weight * x.reps, 0);
+  const volume = w.exercises.filter(e => e.muscle !== 'cardio').flatMap(e => e.sets.filter(s => s.done && !s.warmup)).reduce((s, x) => s + x.weight * x.reps, 0);
   const elapsed = w.startedAt && editable ? Math.max(0, (now - Date.parse(w.startedAt)) / 1000) : null;
 
   return (
@@ -236,14 +241,14 @@ export default function WorkoutPage() {
 
             {w.status !== 'done' && (e.previous || e.suggestion) && (
               <div className="hint-box">
-                {e.previous && <div>Dernière fois ({fmtShort(e.previous.date)}) : <strong>{e.previous.sets.map(fmtSet).join(' · ')}</strong></div>}
+                {e.previous && <div>Dernière fois ({fmtShort(e.previous.date)}) : <strong>{e.previous.sets.map(e.muscle === 'cardio' ? fmtCardio : fmtSet).join(' · ')}</strong></div>}
                 {e.suggestion && <div>Objectif : <strong>{fmtSet(e.suggestion)}</strong> — {e.suggestion.reason}</div>}
               </div>
             )}
 
             {w.status === 'planned' ? null : (
               <table className="sets">
-                <thead><tr><th>#</th><th>Charge (kg)</th><th>Reps</th><th>RPE</th>{editable && <><th><span className="sr-only">Valider</span></th><th /></>}</tr></thead>
+                <thead><tr><th>#</th><th>{e.muscle === 'cardio' ? 'Distance (km)' : 'Charge (kg)'}</th><th>{e.muscle === 'cardio' ? 'Durée (min)' : 'Reps'}</th><th>RPE</th>{editable && <><th><span className="sr-only">Valider</span></th><th /></>}</tr></thead>
                 <tbody>
                   {e.sets.map((s, k) => (
                     <tr key={k} className={s.done ? 'done' : ''}>

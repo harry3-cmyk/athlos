@@ -71,7 +71,7 @@ Lance l'API sur le port 3000 (rechargement automatique) et le front Vite sur htt
 
 | Commande | Rôle |
 |---|---|
-| `npm test` | 35 tests : calculs, générateur, analyse, API complète (SQLite en mémoire) |
+| `npm test` | 42 tests : calculs, générateur, analyse, API complète (SQLite en mémoire) |
 | `npm run typecheck` | Vérification TypeScript, serveur et front |
 | `npm run e2e:pages` | Parcours de la version en ligne, données d'exemple comprises (après `VITE_BASE=/forge/ npm run build:pages`) |
 | `npm run e2e` | Parcours complet de la version serveur dans Chromium (après `npm run build`) ; nécessite `npm i -D playwright && npx playwright install chromium` |
@@ -91,6 +91,8 @@ Lance l'API sur le port 3000 (rechargement automatique) et le front Vite sur htt
 |---|---|
 | Séances | Séance libre ou issue d'un programme ; charge, répétitions, RPE par série ; minuteur de repos ; enregistrement automatique ; correction a posteriori ; exercices personnalisés |
 | Aide à la progression | Rappel de la dernière performance et charge conseillée (double progression : d'abord les répétitions, puis +2,5 %) |
+| Objectifs | Force · Hypertrophie · Force + hypertrophie · Athlétique (explosivité, force, conditionnement) · Opérateur (force, endurance musculaire, course, intervalles, marche chargée) · Perte de gras · Forme générale |
+| Endurance | Course, vélo, rameur, marche chargée : saisie en km et minutes, allure, historique ; exclue des calculs de volume et de 1RM |
 | Programmes | Générateur selon objectif, jours/semaine, niveau, matériel, durée, muscles prioritaires ; chaque règle est justifiée et sourcée ; substitution d'exercices |
 | Planning | Calendrier mensuel ; planification d'un programme sur 4 à 16 semaines avec semaines de décharge ; séances manquées signalées |
 | Progression | 1RM estimé (Epley), volume par séance, records par exercice, détection des records en fin de séance |
@@ -165,6 +167,12 @@ récupération. Il applique les principes communs à la recherche et aux entraî
 | Temps de repos | ACSM Position Stand, 2009 | Consensus |
 | Progression lente, cycles avec décharge | Jim Wendler, *5/3/1* | Méthode d'entraîneur |
 | Volume ajusté à la récupération | Mike Israetel, Renaissance Periodization | Cadre d'entraîneur |
+| L'explosif en début de séance, loin de l'échec | NSCA, *Essentials of Strength Training and Conditioning*, 2016 | Manuel de référence |
+| Force + endurance : séances séparées, endurance dosée | Wilson et al., *J Strength Cond Res*, 2012 | Méta-analyse (interférence nette avec la course, pas le vélo) |
+| Intervalles 4 × 4 min | Helgerud et al., *Med Sci Sports Exerc*, 2007 | Essai contrôlé |
+| Endurance surtout à basse intensité | Seiler, *IJSPP*, 2010 | Revue |
+| Marche chargée progressive combinée à force et endurance | Knapik et al., *J Strength Cond Res*, 2012 | Revue systématique |
+| Force sous-maximale + conditionnement | K. Black, *Tactical Barbell* | Méthode d'entraîneur |
 | En déficit : garder l'intensité, perdre 0,5–1 %/semaine | Helms, Aragon & Fitschen, *JISSN*, 2014 | Revue |
 
 À lire comme des **estimations ou des repères**, pas comme des faits : le 1RM estimé (formule d'Epley), la masse

@@ -4,7 +4,7 @@ import { useAuth } from '../App';
 import { ProgramView } from '../components/ProgramView';
 import { Async, Chips } from '../components/ui';
 import { api, type GenConfig, type Muscle, type Program, type ProgramSummary } from '../lib/api';
-import { GOAL_FR, MUSCLE_FR, MUSCLES, fmtFull, useData } from '../lib/format';
+import { GOAL_DESC, GOAL_FR, MUSCLE_FR, MUSCLES, fmtFull, useData } from '../lib/format';
 
 export default function ProgramsPage() {
   const { user } = useAuth();
@@ -63,6 +63,7 @@ export default function ProgramsPage() {
           <div className="field">Objectif
             <Chips label="Objectif" value={cfg.goal} onChange={goal => patch({ goal })}
               options={(Object.keys(GOAL_FR) as GenConfig['goal'][]).map(g => ({ value: g, label: GOAL_FR[g] }))} />
+            <span className="muted" style={{ fontWeight: 400 }}>{GOAL_DESC[cfg.goal]}</span>
           </div>
           <div className="field">Séances par semaine
             <Chips label="Séances par semaine" value={cfg.days} onChange={days => patch({ days })} options={[2, 3, 4, 5, 6].map(d => ({ value: d, label: String(d) }))} />

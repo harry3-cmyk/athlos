@@ -1,13 +1,48 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { BarsChart, TrendChart } from '../components/Charts';
 import { Async } from '../components/ui';
-import { api, type ExerciseHistory, type RecordRow } from '../lib/api';
+import { api, type CardioHistory, type ExerciseHistory, type RecordRow } from '../lib/api';
 import { MUSCLE_FR, fmtFull, fmtKg, fmtNum, fmtSet, fmtVolume, useData } from '../lib/format';
 
 function ExerciseDetail({ id, name }: { id: number; name: string }) {
-  const state = useData(() => api<ExerciseHistory>('GET', `/exercises/${id}/history`), [id]);
+  const state = useData(() => api<ExerciseHistory | CardioHistory>('GET', `/exercises/${id}/history`), [id]);
   return (
     <Async state={state}>{h => {
+      if (h.cardio) {
+        const total = h.sessions.reduce((s, x) => s + x.minutes, 0);
+        return (
+          <div className="stack">
+            <div className="grid cols-2">
+              <div className="card">
+                <div className="card-head"><h2>Durée par séance</h2><span className="small muted">minutes · {h.sessions.length} séances, {fmtNum(Math.round(total / 6) / 10)} h au total</span></div>
+                <BarsChart data={h.sessions} yKey="minutes" label="Durée" unit="min" />
+              </div>
+              {h.sessions.some(s => s.km > 0) && (
+                <div className="card">
+                  <div className="card-head"><h2>Distance par séance</h2><span className="small muted">km</span></div>
+                  <BarsChart data={h.sessions} yKey="km" label="Distance" unit="km" />
+                </div>
+              )}
+            </div>
+            <div className="card">
+              <h2>Historique — {name}</h2>
+              <table className="table">
+                <thead><tr><th>Date</th><th className="r">Durée</th><th className="r">Distance</th><th className="r">Allure</th></tr></thead>
+                <tbody>
+                  {[...h.sessions].reverse().slice(0, 30).map(s => (
+                    <tr key={s.workoutId}>
+                      <td><Link to={`/seances/${s.workoutId}`}>{fmtFull(s.date)}</Link></td>
+                      <td className="num r">{s.minutes} min</td>
+                      <td className="num r">{s.km > 0 ? `${fmtNum(s.km)} km` : '—'}</td>
+                      <td className="num r">{s.km > 0 ? `${Math.floor(s.minutes / s.km)}:${String(Math.round(((s.minutes / s.km) % 1) * 60)).padStart(2, '0')} /km` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
       if (!h.records) return <div className="card empty"><h3>Pas encore d’historique</h3><p>Les graphiques apparaîtront après ta première séance sur cet exercice.</p></div>;
       const loaded = h.records.weight.value > 0;
       const first = h.sessions[0], last = h.sessions[h.sessions.length - 1];

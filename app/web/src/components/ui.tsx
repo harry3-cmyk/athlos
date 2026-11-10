@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, type Analysis, type Exercise, type Finding, type Muscle } from '../lib/api';
-import { EQUIPMENT_FR, MUSCLE_FR, MUSCLES, fmtNum } from '../lib/format';
+import { api, type Analysis, type Exercise, type Finding, type Group, type Muscle } from '../lib/api';
+import { EQUIPMENT_FR, GROUP_FR, MUSCLE_FR, MUSCLES, fmtNum } from '../lib/format';
+
+const GROUPS = [...MUSCLES, 'cardio'] as Group[];
 
 const ICONS: Record<string, string> = {
   home: 'M3 11l9-8 9 8M5 10v10h14V10',
@@ -87,9 +89,9 @@ export function ExercisePicker({ onPick, onClose, title = 'Ajouter un exercice' 
 }) {
   const [all, setAll] = useState<Exercise[]>([]);
   const [q, setQ] = useState('');
-  const [muscle, setMuscle] = useState<Muscle | ''>('');
+  const [muscle, setMuscle] = useState<Group | ''>('');
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ name: '', muscle: 'chest' as Muscle, equipment: 'machine' });
+  const [draft, setDraft] = useState({ name: '', muscle: 'chest' as Group, equipment: 'machine' });
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { api<Exercise[]>('GET', '/exercises').then(setAll).catch(e => setError(e.message)); }, []);
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
@@ -111,9 +113,9 @@ export function ExercisePicker({ onPick, onClose, title = 'Ajouter un exercice' 
         <div className="stack">
           <label className="field">Nom<input className="input" autoFocus value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
           <div className="form-grid">
-            <label className="field">Muscle principal
-              <select className="input" value={draft.muscle} onChange={e => setDraft({ ...draft, muscle: e.target.value as Muscle })}>
-                {MUSCLES.map(m => <option key={m} value={m}>{MUSCLE_FR[m]}</option>)}
+            <label className="field">Muscle principal ou cardio
+              <select className="input" value={draft.muscle} onChange={e => setDraft({ ...draft, muscle: e.target.value as Group })}>
+                {GROUPS.map(m => <option key={m} value={m}>{GROUP_FR[m]}</option>)}
               </select>
             </label>
             <label className="field">Matériel
@@ -131,15 +133,15 @@ export function ExercisePicker({ onPick, onClose, title = 'Ajouter un exercice' 
         <>
           <div className="row" style={{ marginBottom: 8 }}>
             <input className="input grow" placeholder="Rechercher…" autoFocus value={q} onChange={e => setQ(e.target.value)} aria-label="Rechercher un exercice" />
-            <select className="input" style={{ width: 150 }} value={muscle} onChange={e => setMuscle(e.target.value as Muscle | '')} aria-label="Filtrer par muscle">
-              <option value="">Tous les muscles</option>
-              {MUSCLES.map(m => <option key={m} value={m}>{MUSCLE_FR[m]}</option>)}
+            <select className="input" style={{ width: 150 }} value={muscle} onChange={e => setMuscle(e.target.value as Group | '')} aria-label="Filtrer par muscle">
+              <option value="">Tous</option>
+              {GROUPS.map(m => <option key={m} value={m}>{GROUP_FR[m]}</option>)}
             </select>
           </div>
           {shown.map(e => (
             <button key={e.id} className="pick" onClick={() => onPick(e)}>
               <span><strong>{e.name}</strong>{e.custom && <span className="badge" style={{ marginLeft: 8 }}>Perso</span>}</span>
-              <span className="small muted">{MUSCLE_FR[e.muscle]} · {EQUIPMENT_FR[e.equipment]}</span>
+              <span className="small muted">{GROUP_FR[e.muscle]} · {EQUIPMENT_FR[e.equipment]}</span>
             </button>
           ))}
           {!shown.length && <p className="muted" style={{ padding: '14px 0' }}>Aucun exercice trouvé.</p>}

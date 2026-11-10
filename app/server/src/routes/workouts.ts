@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { DB } from '../schema.js';
-import { MUSCLES } from '../domain/exercises.seed.js';
+import { CARDIO, MUSCLES } from '../domain/exercises.seed.js';
 import { e1rm, round1 } from '../domain/metrics.js';
 import { HttpError, parse, userId, zDate, zId } from '../http.js';
 import {
@@ -46,8 +46,8 @@ export function workoutsRouter(db: DB) {
   r.post('/exercises', (req, res) => {
     const b = parse(z.object({
       name: z.string().trim().min(2).max(80),
-      muscle: z.enum(MUSCLES),
-      equipment: z.enum(['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight']),
+      muscle: z.enum([...MUSCLES, CARDIO]),
+      equipment: z.enum(['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'other']),
       compound: z.boolean().default(false),
     }), req.body);
     const info = db.prepare(`INSERT INTO exercises (user_id, name, muscle, equipment, pattern, compound)
@@ -69,7 +69,18 @@ export function workoutsRouter(db: DB) {
   // — Historique et records d'un exercice
   r.get('/exercises/:id/history', (req, res) => {
     const id = parse(zId, req.params.id);
-    const sets = workSets(db, userId(res), { exerciseId: id });
+    const sets = workSets(db, userId(res), { exerciseId: id, kind: 'all' });
+    if (sets[0]?.cardio) {
+      // Endurance : distance et durée cumulées par séance.
+      const by = new Map<number, { workoutId: number; date: string; km: number; minutes: number }>();
+      for (const s of sets) {
+        const x = by.get(s.workoutId) ?? { workoutId: s.workoutId, date: s.date, km: 0, minutes: 0 };
+        x.km = round1(x.km + s.weight); x.minutes += s.reps;
+        by.set(s.workoutId, x);
+      }
+      res.json({ cardio: true, sessions: [...by.values()], records: null });
+      return;
+    }
     const sessions = new Map<number, any>();
     for (const s of sets) {
       if (!sessions.has(s.workoutId)) {
@@ -123,7 +134,8 @@ export function workoutsRouter(db: DB) {
         (SELECT COUNT(*) FROM sets s JOIN workout_exercises we ON we.id = s.workout_exercise_id
           WHERE we.workout_id = w.id AND s.done = 1 AND s.warmup = 0) AS setCount,
         (SELECT COALESCE(SUM(s.weight * s.reps), 0) FROM sets s JOIN workout_exercises we ON we.id = s.workout_exercise_id
-          WHERE we.workout_id = w.id AND s.done = 1 AND s.warmup = 0) AS volume,
+          JOIN exercises e ON e.id = we.exercise_id
+          WHERE we.workout_id = w.id AND s.done = 1 AND s.warmup = 0 AND e.muscle != 'cardio') AS volume,
         CASE WHEN w.started_at IS NOT NULL AND w.finished_at IS NOT NULL
           THEN CAST((julianday(w.finished_at) - julianday(w.started_at)) * 1440 AS INTEGER) END AS minutes
       FROM workouts w

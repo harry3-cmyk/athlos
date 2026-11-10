@@ -18,6 +18,7 @@ export interface AnalysisInput {
   goal: Goal;
   level?: Level;                       // niveau du dernier programme généré, s'il existe
   sets: AnalysisSet[];                 // séries de travail validées, 12 dernières semaines
+  cardio?: { date: string; workoutId: number; minutes: number; km: number }[]; // séries d'endurance, 12 dernières semaines
   missedPlanned: number;               // séances planifiées non faites sur 28 jours
   weights: { date: string; weight: number }[];
 }
@@ -33,6 +34,7 @@ export interface AnalysisResult {
   ratios: { label: string; value: number; low: number; high: number; a: number; b: number }[];
   trends: { exerciseId: number; name: string; sessions: number; pctPerWeek: number; best: number }[];
   consistency: { perWeek: number; adherence: number | null };
+  cardio: { minutesPerWeek: number; sessionsPerWeek: number; kmPerWeek: number };
   weightTrend: { pctPerWeek: number; kgPerWeek: number } | null;
   findings: Finding[];
 }
@@ -43,7 +45,9 @@ const T = {
   minSessionsForTrend: 4,
   plateauPctPerWeek: 0.15, // en dessous : stagnation
   regressPctPerWeek: -0.5,
-  highVolume: 25,          // séries/sem au-delà desquelles on alerte sur la récupération
+  highVolume: 25,
+  cardioTactical: 90,      // minutes d'endurance par semaine visées pour le profil opérateur
+  cardioAthletic: 30,      // idem pour le profil athlétique          // séries/sem au-delà desquelles on alerte sur la récupération
   pullPushMin: 0.8,        // tirage / poussée
   postQuadMin: 0.6,        // chaîne postérieure / quadriceps
   minorMuscles: ['abs', 'calves'] as Muscle[],
@@ -81,7 +85,8 @@ export function analyze(input: AnalysisInput): AnalysisResult {
   const recent = input.sets.filter(s => s.date >= from28 && s.date <= today);
   const weeks = T.windowDays / 7;
 
-  const sessions28 = new Set(recent.map(s => s.workoutId)).size;
+  const cardio28 = (input.cardio ?? []).filter(c => c.date >= from28 && c.date <= today);
+  const sessions28 = new Set([...recent, ...cardio28].map(s => s.workoutId)).size;
   const enough = sessions28 >= 4;
   if (!enough) {
     findings.push({
@@ -238,6 +243,32 @@ export function analyze(input: AnalysisInput): AnalysisResult {
     });
   }
 
+  // — Endurance (objectifs qui en dépendent) : repères pratiques, pas des normes.
+  const cardio = {
+    minutesPerWeek: Math.round(cardio28.reduce((s, c) => s + c.minutes, 0) / weeks),
+    sessionsPerWeek: round1(new Set(cardio28.map(c => c.workoutId)).size / weeks),
+    kmPerWeek: round1(cardio28.reduce((s, c) => s + c.km, 0) / weeks),
+  };
+  const cardioFloor = goal === 'tactical' ? T.cardioTactical : goal === 'athletic' ? T.cardioAthletic : 0;
+  if (enough && cardioFloor && cardio.minutesPerWeek < cardioFloor) {
+    findings.push({
+      id: 'cardio', severity: goal === 'tactical' ? (cardio.minutesPerWeek < cardioFloor / 2 ? 'high' : 'medium') : 'low', category: 'Endurance',
+      title: 'Endurance insuffisante pour ton objectif',
+      detail: `${cardio.minutesPerWeek} min/semaine d’endurance en moyenne, pour un repère de ${cardioFloor} min.`,
+      action: goal === 'tactical'
+        ? 'Ajoute une séance d’endurance fondamentale (30 à 60 min en aisance respiratoire) et garde une séance d’intervalles par semaine.'
+        : 'Ajoute un bloc d’intervalles courts en fin de séance ou une séance de conditionnement dédiée.',
+    });
+  }
+  if (enough && goal === 'tactical' && recent.length === 0) {
+    findings.push({
+      id: 'no-strength', severity: 'high', category: 'Force',
+      title: 'Aucune séance de force sur 28 jours',
+      detail: 'L’endurance seule ne prépare ni au portage de charge ni aux efforts courts et intenses.',
+      action: 'Planifie au moins 2 séances de force par semaine sur les mouvements de base.',
+    });
+  }
+
   // — Régularité
   const perWeek = round1(sessions28 / weeks);
   const adherence = sessions28 + input.missedPlanned > 0 && input.missedPlanned > 0
@@ -270,7 +301,7 @@ export function analyze(input: AnalysisInput): AnalysisResult {
         action: 'Réduis les apports d’environ 10 % ou ajoute de l’activité quotidienne, puis réévalue dans 2 semaines.' });
       else findings.push({ id: 'weight', severity: 'good', category: 'Poids',
         title: 'Rythme de perte adapté', detail: `${fr(p)} %/semaine, dans la zone −0,5 à −1 %.`, action: 'Continue ainsi.' });
-    } else if (goal === 'hypertrophy') {
+    } else if (goal === 'hypertrophy' || goal === 'powerbuilding') {
       if (p > 0.5) findings.push({ id: 'weight', severity: 'low', category: 'Poids',
         title: 'Prise de poids rapide', detail: `+${fr(p)} %/semaine. Au-delà de 0,5 %/semaine, une part croissante est du gras (repère pratique).`,
         action: 'Réduis légèrement le surplus calorique.' });
@@ -282,5 +313,5 @@ export function analyze(input: AnalysisInput): AnalysisResult {
 
   const order: Record<Severity, number> = { high: 0, medium: 1, low: 2, good: 3 };
   findings.sort((a, b) => order[a.severity] - order[b.severity]);
-  return { dataQuality: { sessions28, enough }, muscles, balance, ratios, trends, consistency: { perWeek, adherence }, weightTrend, findings };
+  return { dataQuality: { sessions28, enough }, muscles, balance, ratios, trends, consistency: { perWeek, adherence }, cardio, weightTrend, findings };
 }

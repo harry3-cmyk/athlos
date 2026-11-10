@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Goal, Muscle } from './api';
+import type { Goal, Group, Muscle } from './api';
 
 export const MUSCLE_FR: Record<Muscle, string> = {
   chest: 'Pectoraux', back: 'Dos', shoulders: 'Épaules', biceps: 'Biceps', triceps: 'Triceps',
   quads: 'Quadriceps', hamstrings: 'Ischio-jambiers', glutes: 'Fessiers', calves: 'Mollets', abs: 'Abdominaux',
 };
 export const MUSCLES = Object.keys(MUSCLE_FR) as Muscle[];
+export const GROUP_FR: Record<Group, string> = { ...MUSCLE_FR, cardio: 'Cardio' };
 export const GOAL_FR: Record<Goal, string> = {
-  strength: 'Force', hypertrophy: 'Hypertrophie', fat_loss: 'Perte de gras', general: 'Forme générale',
+  strength: 'Force', hypertrophy: 'Hypertrophie', powerbuilding: 'Force + hypertrophie', athletic: 'Athlétique',
+  tactical: 'Opérateur', fat_loss: 'Perte de gras', general: 'Forme générale',
+};
+export const GOAL_DESC: Record<Goal, string> = {
+  strength: 'Soulever le plus lourd possible sur les mouvements de base.',
+  hypertrophy: 'Prendre un maximum de masse musculaire.',
+  powerbuilding: 'Être fort ET musclé : mouvements de base lourds, puis volume pour la masse.',
+  athletic: 'Explosif, fort et endurant : sauts et lancers, force lourde, unilatéral, portés, conditionnement.',
+  tactical: 'Préparation physique d’opérateur : force, endurance musculaire, course, intervalles et marche chargée.',
+  fat_loss: 'Perdre du gras en conservant le muscle.',
+  general: 'Rester en forme, avec un effort modéré et durable.',
 };
 export const EQUIPMENT_FR: Record<string, string> = {
-  barbell: 'Barre', dumbbell: 'Haltères', machine: 'Machine', cable: 'Poulie', bodyweight: 'Poids du corps',
+  barbell: 'Barre', dumbbell: 'Haltères', machine: 'Machine', cable: 'Poulie', bodyweight: 'Poids du corps', other: 'Petit matériel',
 };
 export const DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
@@ -51,6 +62,8 @@ export function fmtVolume(kg: number): string {
   return kg >= 10000 ? `${NUM.format(kg / 1000)} t` : `${NUM.format(Math.round(kg))} kg`;
 }
 export const fmtSet = (s: { weight: number; reps: number }) => (s.weight > 0 ? `${NUM.format(s.weight)} × ${s.reps}` : `${s.reps} reps`);
+/** Série d'endurance : distance (facultative) et durée. */
+export const fmtCardio = (s: { weight: number; reps: number }) => (s.weight > 0 ? `${NUM.format(s.weight)} km en ${s.reps} min` : `${s.reps} min`);
 export function fmtClock(sec: number): string {
   const s = Math.max(0, Math.round(sec));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

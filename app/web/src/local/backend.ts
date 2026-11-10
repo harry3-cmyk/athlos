@@ -1,6 +1,7 @@
 import initSqlJs from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { seedDemoData } from '../../../server/src/demo-data.js';
+import { GOALS } from '../../../server/src/domain/generator.js';
 import { HttpError } from '../../../server/src/http.js';
 import { dataRouter } from '../../../server/src/routes/data.js';
 import { insightsRouter } from '../../../server/src/routes/insights.js';
@@ -72,7 +73,7 @@ function localRoutes(db: Ctx['db'], method: string, path: string, body: any): un
     const name = String(body?.name ?? '').trim().slice(0, 80);
     const sex = body?.sex === 'male' || body?.sex === 'female' ? body.sex : null;
     const height = Number(body?.heightCm), year = Number(body?.birthYear);
-    const goal = ['strength', 'hypertrophy', 'fat_loss', 'general'].includes(body?.goal) ? body.goal : 'hypertrophy';
+    const goal = (GOALS as readonly string[]).includes(body?.goal) ? body.goal : 'hypertrophy';
     if (body?.heightCm != null && !(height >= 100 && height <= 250)) throw new HttpError(400, 'Taille invalide (100 à 250 cm).');
     if (body?.birthYear != null && !(year >= 1900 && year <= 2100)) throw new HttpError(400, 'Année de naissance invalide.');
     db.prepare('UPDATE users SET name = ?, sex = ?, height_cm = ?, birth_year = ?, goal = ? WHERE id = ?')

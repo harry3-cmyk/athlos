@@ -229,3 +229,42 @@ describe('tableau de bord, analyse, export', () => {
     expect((await carol('POST', '/import', { version: 2 })).status).toBe(400);
   });
 });
+
+describe('endurance et nouveaux objectifs', () => {
+  const dan = client();
+  it('enregistre du cardio sans polluer volume, records ni 1RM', async () => {
+    await dan('POST', '/auth/register', { email: 'dan@test.fr', password: 'motdepasse4', name: 'Dan' });
+    expect((await dan('PATCH', '/auth/me', { name: 'Dan', sex: null, heightCm: null, birthYear: null, goal: 'tactical' })).body.goal).toBe('tactical');
+    const run = exercises.find(e => e.name === 'Course — endurance fondamentale');
+    expect(run.muscle).toBe('cardio');
+    for (const [date, km, min] of [['2026-04-01', 8, 45], ['2026-04-03', 9, 48]] as const) {
+      const w = await dan('POST', '/workouts', { name: 'Footing', date, status: 'in_progress',
+        exercises: [{ exerciseId: run.id, sets: [{ weight: km, reps: min, done: true }] }] });
+      const fin = await dan('POST', `/workouts/${w.body.id}/finish`);
+      expect(fin.body.records).toEqual([]); // pas de « record de charge » sur une distance
+      expect(fin.body.workout.exercises[0].suggestion).toBeNull();
+    }
+    expect((await dan('GET', '/records')).body).toEqual([]);
+    const list = (await dan('GET', '/workouts?status=done')).body;
+    expect(list.map((w: any) => w.volume)).toEqual([0, 0]);
+    const h = (await dan('GET', `/exercises/${run.id}/history`)).body;
+    expect(h).toMatchObject({ cardio: true, sessions: [{ km: 8, minutes: 45 }, { km: 9, minutes: 48 }] });
+    const d = (await dan('GET', '/dashboard?today=2026-04-04')).body;
+    expect(d.kpis).toMatchObject({ sessionsThisWeek: 2, volumeThisWeek: 0, totalWorkouts: 2 });
+    const a = (await dan('GET', '/analysis?today=2026-04-04')).body;
+    expect(a.cardio.minutesPerWeek).toBe(23);
+  });
+
+  it('génère, enregistre et démarre un programme opérateur', async () => {
+    const saved = await dan('POST', '/programs', { config: { goal: 'tactical', days: 5, level: 'intermediate', equipment: 'gym', minutes: 60, priorities: [] } });
+    expect(saved.status).toBe(201);
+    expect(saved.body.name).toBe('Opérateur · 5 j/sem');
+    const ruck = saved.body.days[4];
+    expect(ruck.exercises[0]).toMatchObject({ muscle: 'cardio', role: 'cardio', sets: 1 });
+    expect(saved.body.weeklySets.find((w: any) => w.muscle === 'quads').sets).toBeGreaterThan(0);
+    const w = await dan('POST', `/programs/${saved.body.id}/days/${ruck.id}/start`, { date: today });
+    const started = await dan('POST', `/workouts/${w.body.id}/start`, {});
+    expect(started.body.exercises[0].sets).toEqual([{ weight: 0, reps: 45, rpe: null, warmup: false, done: false }]);
+    expect((await dan('POST', '/programs/generate', { goal: 'inconnu', days: 4, level: 'intermediate', equipment: 'gym', minutes: 60 })).status).toBe(400);
+  });
+});

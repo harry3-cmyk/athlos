@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { DB } from './db.js';
+import { GOALS } from './domain/generator.js';
 import { HttpError, parse, userId } from './http.js';
 
 const COOKIE = 'forge_session';
@@ -127,7 +128,7 @@ export function authRouter(db: DB, opts: { allowRegistration: boolean; rateLimit
       sex: z.enum(['male', 'female']).nullable(),
       heightCm: z.number().min(100).max(250).nullable(),
       birthYear: z.number().int().min(1900).max(2100).nullable(),
-      goal: z.enum(['strength', 'hypertrophy', 'fat_loss', 'general']),
+      goal: z.enum(GOALS),
     }), req.body);
     db.prepare('UPDATE users SET name=?, sex=?, height_cm=?, birth_year=?, goal=? WHERE id=?')
       .run(b.name, b.sex, b.heightCm, b.birthYear, b.goal, userId(res));

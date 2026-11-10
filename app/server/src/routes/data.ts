@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { DB } from '../schema.js';
-import { MUSCLES } from '../domain/exercises.seed.js';
+import { CARDIO, MUSCLES } from '../domain/exercises.seed.js';
 import { parse, userId, zDate } from '../http.js';
 import { replaceWorkoutContent } from '../queries.js';
 
@@ -11,7 +11,7 @@ import { replaceWorkoutContent } from '../queries.js';
  * Les programmes ne sont pas exportés : ils se régénèrent à partir de leur configuration.
  */
 
-const zRef = z.object({ slug: z.string().nullable(), name: z.string(), muscle: z.enum(MUSCLES), equipment: z.string(), compound: z.boolean() });
+const zRef = z.object({ slug: z.string().nullable(), name: z.string(), muscle: z.enum([...MUSCLES, CARDIO]), equipment: z.string(), compound: z.boolean() });
 const zImport = z.object({
   version: z.literal(1),
   workouts: z.array(z.object({
@@ -64,7 +64,7 @@ export function dataRouter(db: DB) {
     const resolve = (ref: z.infer<typeof zRef>): number => {
       const found = (ref.slug && bySlug.get(ref.slug)) || byName.get(ref.name, uid);
       if (found) return (found as { id: number }).id;
-      const eq = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight'].includes(ref.equipment) ? ref.equipment : 'machine';
+      const eq = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'other'].includes(ref.equipment) ? ref.equipment : 'machine';
       return Number(create.run(uid, ref.name, ref.muscle, eq, ref.compound ? 1 : 0).lastInsertRowid);
     };
     let bodyAdded = 0;

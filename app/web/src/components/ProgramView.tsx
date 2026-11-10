@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
 import type { Program, ProgramDay, ProgramExercise } from '../lib/api';
-import { MUSCLE_FR, fmtRest } from '../lib/format';
+import { GROUP_FR, fmtRest } from '../lib/format';
 import { MuscleBars } from './ui';
 
-const ROLE_FR: Record<string, string> = { main: 'Principal', secondary: 'Secondaire', accessory: 'Accessoire' };
+const ROLE_FR: Record<string, string> = {
+  main: 'Principal', secondary: 'Secondaire', accessory: 'Accessoire', power: 'Explosif', endurance: 'Endurance musculaire', carry: 'Porté', cardio: 'Endurance',
+};
+const range = (a: number, b: number) => (a === b ? String(a) : `${a}–${b}`);
 
 /** Affichage d'un programme (aperçu du générateur ou programme enregistré). */
 export function ProgramView({ program, dayAction, exerciseAction }: {
@@ -35,9 +38,9 @@ export function ProgramView({ program, dayAction, exerciseAction }: {
                 <tbody>
                   {d.exercises.map((e, j) => (
                     <tr key={e.id ?? j}>
-                      <td><strong>{e.name}</strong><div className="small muted">{MUSCLE_FR[e.muscle]} · {ROLE_FR[e.role] ?? e.role}</div></td>
-                      <td className="num" style={{ whiteSpace: 'nowrap' }}>{e.sets} × {e.repsMin}–{e.repsMax}</td>
-                      <td className="num">{e.rir}</td>
+                      <td><strong>{e.name}</strong><div className="small muted">{e.muscle === 'cardio' ? ROLE_FR.cardio : `${GROUP_FR[e.muscle]} · ${ROLE_FR[e.role] ?? e.role}`}</div></td>
+                      <td className="num" style={{ whiteSpace: 'nowrap' }}>{e.sets} × {range(e.repsMin, e.repsMax)}{e.muscle === 'cardio' ? ' min' : e.role === 'carry' ? ' m' : ''}</td>
+                      <td className="num">{e.muscle === 'cardio' ? '—' : e.rir}</td>
                       <td className="num" style={{ whiteSpace: 'nowrap' }}>{fmtRest(e.restSec)}</td>
                       {exerciseAction && <td className="r">{exerciseAction(e, d)}</td>}
                     </tr>
@@ -52,8 +55,8 @@ export function ProgramView({ program, dayAction, exerciseAction }: {
       <div className="grid cols-2">
         <div className="card">
           <div className="card-head"><h2>Séries hebdomadaires par muscle</h2><span className="small muted">trait = repère</span></div>
-          <MuscleBars rows={program.weeklySets.map(w => ({ ...w, floor: program.goal === 'hypertrophy' && program.config.level !== 'beginner' ? 10 : 6 }))} />
-          <p className="source">Muscle principal = 1 série, muscle secondaire = 0,5 série. RIR = répétitions en réserve avant l’échec.</p>
+          <MuscleBars rows={program.weeklySets.map(w => ({ ...w, floor: (program.goal === 'hypertrophy' || program.goal === 'powerbuilding') && program.config.level !== 'beginner' ? 10 : 6 }))} />
+          <p className="source">Muscle principal = 1 série, muscle secondaire = 0,5 série ; l’endurance n’est pas comptée ici. RIR = répétitions en réserve avant l’échec.</p>
         </div>
         <div className="card">
           <h2>Pourquoi ce programme</h2>

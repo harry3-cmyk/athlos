@@ -46,8 +46,10 @@ function runAnalysis(db: DB, uid: number, today: string) {
   const weights = db.prepare(`SELECT date, weight_kg AS weight FROM body_metrics
     WHERE user_id = ? AND weight_kg IS NOT NULL ORDER BY date`).all(uid) as { date: string; weight: number }[];
   const lastProgram = db.prepare('SELECT config FROM programs WHERE user_id = ? ORDER BY id DESC LIMIT 1').get(uid) as { config: string } | undefined;
+  const all = workSets(db, uid, { from: addDays(today, -83), kind: 'all' });
   return analyze({
-    today, goal: user.goal, level: lastProgram ? JSON.parse(lastProgram.config).level : undefined, sets: workSets(db, uid, { from: addDays(today, -83) }), missedPlanned: missed.n, weights,
+    today, goal: user.goal, level: lastProgram ? JSON.parse(lastProgram.config).level : undefined,
+    cardio: all.filter(s => s.cardio).map(s => ({ date: s.date, workoutId: s.workoutId, minutes: s.reps, km: s.weight })), sets: all.filter(s => !s.cardio), missedPlanned: missed.n, weights,
   });
 }
 
@@ -86,19 +88,21 @@ export function insightsRouter(db: DB) {
     const uid = userId(res);
     const today = todayOr(req.query.today);
     const thisWeek = weekStart(today);
-    const all = workSets(db, uid);
+    const everything = workSets(db, uid, { kind: 'all' });
+    const all = everything.filter(s => !s.cardio); // volume, records : musculation seule
 
     // 12 dernières semaines : volume (kg), séries, séances.
     const weeks = Array.from({ length: 12 }, (_, i) => addDays(thisWeek, (i - 11) * 7));
     const agg = new Map(weeks.map(w => [w, { week: w, volume: 0, sets: 0, workouts: new Set<number>() }]));
     for (const s of all) {
       const a = agg.get(weekStart(s.date));
-      if (a) { a.volume += s.weight * s.reps; a.sets++; a.workouts.add(s.workoutId); }
+      if (a) { a.volume += s.weight * s.reps; a.sets++; }
     }
+    for (const s of everything) agg.get(weekStart(s.date))?.workouts.add(s.workoutId);
     const weekly = [...agg.values()].map(a => ({ week: a.week, volume: Math.round(a.volume), sets: a.sets, sessions: a.workouts.size }));
 
     // Série de semaines consécutives avec au moins une séance (la semaine en cours ne casse pas la série).
-    const activeWeeks = new Set(all.map(s => weekStart(s.date)));
+    const activeWeeks = new Set(everything.map(s => weekStart(s.date)));
     let streak = 0;
     for (let w = activeWeeks.has(thisWeek) ? thisWeek : addDays(thisWeek, -7); activeWeeks.has(w); w = addDays(w, -7)) streak++;
 
@@ -121,7 +125,7 @@ export function insightsRouter(db: DB) {
         streakWeeks: streak,
         weight: last ? { value: last.weightKg, trend: last.weightTrend, date: last.date,
           delta28: ref && last.weightTrend != null && ref.weightTrend != null ? round1(last.weightTrend - ref.weightTrend) : null } : null,
-        totalWorkouts: new Set(all.map(s => s.workoutId)).size,
+        totalWorkouts: new Set(everything.map(s => s.workoutId)).size,
       },
       weekly,
       current: current ?? null,

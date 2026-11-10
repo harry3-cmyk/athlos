@@ -9,9 +9,11 @@ export interface WorkSet {
   date: string; workoutId: number; exerciseId: number; slug: string | null; name: string;
   muscle: Muscle; secondary: Muscle[]; pattern: Pattern; compound: boolean;
   weight: number; reps: number; rpe: number | null;
+  cardio: boolean; // pour le cardio : weight = distance (km), reps = durée (min)
 }
 
-export function workSets(db: DB, uid: number, f: { from?: string; exerciseId?: number } = {}): WorkSet[] {
+/** Par défaut, seules les séries de musculation sont renvoyées ; `kind: 'all'` ajoute le cardio. */
+export function workSets(db: DB, uid: number, f: { from?: string; exerciseId?: number; kind?: 'strength' | 'all' } = {}): WorkSet[] {
   const rows = db.prepare(`
     SELECT w.date, w.id AS workoutId, e.id AS exerciseId, e.slug, e.name, e.muscle, e.secondary, e.pattern,
            e.compound, s.weight, s.reps, s.rpe
@@ -22,9 +24,10 @@ export function workSets(db: DB, uid: number, f: { from?: string; exerciseId?: n
     WHERE w.user_id = @uid AND w.status = 'done' AND s.done = 1 AND s.warmup = 0 AND s.reps > 0
       AND (@from IS NULL OR w.date >= @from)
       AND (@exerciseId IS NULL OR e.id = @exerciseId)
+      AND (@all = 1 OR e.muscle != 'cardio')
     ORDER BY w.date, w.id, we.position, s.position
-  `).all({ uid, from: f.from ?? null, exerciseId: f.exerciseId ?? null }) as any[];
-  return rows.map(r => ({ ...r, secondary: JSON.parse(r.secondary), compound: !!r.compound }));
+  `).all({ uid, from: f.from ?? null, exerciseId: f.exerciseId ?? null, all: f.kind === 'all' ? 1 : 0 }) as any[];
+  return rows.map(r => ({ ...r, secondary: JSON.parse(r.secondary), compound: !!r.compound, cardio: r.muscle === 'cardio' }));
 }
 
 export interface PrEvent {
@@ -117,7 +120,7 @@ export function loadWorkout(db: DB, uid: number, id: number) {
     notes: w.notes, programId: w.program_id, deload: !!w.deload,
     exercises: exs.map(x => {
       const previous = previousPerformance(db, uid, x.exercise_id, id);
-      const suggestion = previous && x.reps_min && x.reps_max
+      const suggestion = previous && x.reps_min && x.reps_max && x.muscle !== 'cardio'
         ? suggestNext(previous.sets, x.reps_min, x.reps_max, { deload: !!w.deload }) : null;
       return {
         exerciseId: x.exercise_id, name: x.name, muscle: x.muscle, equipment: x.equipment,

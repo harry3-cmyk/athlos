@@ -2,13 +2,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { DB } from '../schema.js';
 import { MUSCLES, type Muscle } from '../domain/exercises.seed.js';
-import { generateProgram, type GeneratedProgram } from '../domain/generator.js';
+import { GOALS, estimateMinutes, generateProgram, weeklyVolume, type GeneratedProgram } from '../domain/generator.js';
 import { addDays, weekStart } from '../domain/metrics.js';
 import { HttpError, parse, userId, zDate, zId } from '../http.js';
 import { assertExercises, catalog, loadWorkout, replaceWorkoutContent } from '../queries.js';
 
 const zConfig = z.object({
-  goal: z.enum(['strength', 'hypertrophy', 'fat_loss', 'general']),
+  goal: z.enum(GOALS),
   days: z.number().int().min(2).max(6),
   level: z.enum(['beginner', 'intermediate', 'advanced']),
   equipment: z.enum(['gym', 'dumbbells', 'bodyweight']),
@@ -40,23 +40,14 @@ function loadProgram(db: DB, uid: number, id: number) {
            pde.reps_min AS repsMin, pde.reps_max AS repsMax, pde.rir, pde.rest_sec AS restSec, pde.role
     FROM program_day_exercises pde JOIN exercises e ON e.id = pde.exercise_id
     WHERE pde.program_day_id = ? ORDER BY pde.position`);
-  const sets = new Map<Muscle, number>(MUSCLES.map(m => [m, 0]));
-  const freq = new Map<Muscle, number>(MUSCLES.map(m => [m, 0]));
   const outDays = days.map(d => {
     const exercises = (exStmt.all(d.id) as any[]).map(e => ({ ...e, secondary: JSON.parse(e.secondary) as Muscle[] }));
-    const hit = new Set<Muscle>();
-    for (const e of exercises) {
-      sets.set(e.muscle, sets.get(e.muscle)! + e.sets); hit.add(e.muscle);
-      for (const s of e.secondary) { sets.set(s, sets.get(s)! + e.sets * 0.5); hit.add(s); }
-    }
-    hit.forEach(m => freq.set(m, freq.get(m)! + 1));
-    const estMinutes = Math.round(8 + exercises.reduce((s, e) => s + e.sets * (e.restSec + 45), 0) / 60);
-    return { id: d.id, name: d.name, focus: d.focus, estMinutes, exercises };
+    return { id: d.id, name: d.name, focus: d.focus, estMinutes: estimateMinutes(exercises), exercises };
   });
   return {
     id: p.id, name: p.name, goal: p.goal, createdAt: p.created_at,
     config: JSON.parse(p.config), rationale: JSON.parse(p.rationale), days: outDays,
-    weeklySets: MUSCLES.map(m => ({ muscle: m, sets: sets.get(m)!, frequency: freq.get(m)! })),
+    weeklySets: weeklyVolume(outDays),
   };
 }
 
